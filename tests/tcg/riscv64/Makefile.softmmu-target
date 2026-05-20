@@ -24,5 +24,26 @@ EXTRA_RUNS += run-test-mepc-masking
 run-test-mepc-masking: test-mepc-masking
 	$(call run-test, $<, $(QEMU) $(QEMU_OPTS)$<)
 
+EXTRA_RUNS += run-test-ame-csr
+run-test-ame-csr: QEMU_OPTS += -cpu rv64,xsmtame06v=true
+run-test-ame-csr: test-ame-csr
+	$(call run-test, $<, $(QEMU) $(QEMU_OPTS)$<)
+
+ifneq ($(GDB),)
+GDB_SCRIPT=$(SRC_PATH)/tests/guest-debug/run-test.py
+MULTIARCH_SRC=$(SRC_PATH)/tests/tcg/multiarch
+
+EXTRA_RUNS += run-gdbstub-ame-registers
+run-gdbstub-ame-registers: QEMU_OPTS += -cpu rv64,xsmtame06v=true
+run-gdbstub-ame-registers: test-ame-csr
+	$(call run-test, $@, $(GDB_SCRIPT) \
+		--gdb $(GDB) \
+		--qemu $(QEMU) \
+		--output $<.ame-registers.gdb.out \
+		--qargs \
+		"-monitor none -display none -chardev file$(COMMA)path=$<.out$(COMMA)id=output $(QEMU_OPTS)" \
+		--bin $< --test $(MULTIARCH_SRC)/gdbstub/registers.py, \
+	AME gdbstub register enumeration)
+endif
 # We don't currently support the multiarch system tests
 undefine MULTIARCH_TESTS
