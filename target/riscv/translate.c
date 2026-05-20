@@ -724,6 +724,41 @@ static void mark_vs_dirty(DisasContext *ctx)
 static inline void mark_vs_dirty(DisasContext *ctx) { }
 #endif
 
+/*
+ * mark_ms_dirty — set mstatus.MS to Dirty (11).
+ *
+ * Since TB_FLAGS is full (32 bits), we do NOT cache MS in TB_FLAGS.
+ * Every call emits TCG ops unconditionally (no "already dirty" skip).
+ * This only costs a few extra TCG ops per AME instruction; functional
+ * correctness is unaffected.
+ */
+#ifndef CONFIG_USER_ONLY
+static void mark_ms_dirty(DisasContext *ctx)
+{
+    TCGv tmp = tcg_temp_new();
+    tcg_gen_ld_tl(tmp, tcg_env, offsetof(CPURISCVState, mstatus));
+    tcg_gen_ori_tl(tmp, tmp, MSTATUS_MS);
+    tcg_gen_st_tl(tmp, tcg_env, offsetof(CPURISCVState, mstatus));
+
+    if (ctx->virt_enabled) {
+        tcg_gen_ld_tl(tmp, tcg_env, offsetof(CPURISCVState, mstatus_hs));
+        tcg_gen_ori_tl(tmp, tmp, MSTATUS_MS);
+        tcg_gen_st_tl(tmp, tcg_env, offsetof(CPURISCVState, mstatus_hs));
+    }
+}
+#else
+static inline void mark_ms_dirty(DisasContext *ctx) { }
+#endif
+
+/*
+ * require_xsmtame06v — check that XSmtAme06v extension is enabled.
+ * Returns true if AME instructions can proceed.
+ */
+static bool require_xsmtame06v(DisasContext *ctx)
+{
+    return ctx->cfg_ptr->ext_xsmtame06v;
+}
+
 static void finalize_rvv_inst(DisasContext *ctx)
 {
     mark_vs_dirty(ctx);
@@ -1197,6 +1232,8 @@ static uint32_t opcode_at(DisasContextBase *dcbase, target_ulong pc)
 #include "decode-xthead.c.inc"
 #include "insn_trans/trans_xthead.c.inc"
 #include "insn_trans/trans_xventanacondops.c.inc"
+#include "decode-ame_ext.c.inc"
+#include "insn_trans/trans_ame_ext.c.inc"
 
 /* Include the auto-generated decoder for 16 bit insn */
 #include "decode-insn16.c.inc"
@@ -1214,6 +1251,7 @@ const RISCVDecoder decoder_table[] = {
     { always_true_p, decode_insn32 },
     { has_xthead_p, decode_xthead},
     { has_XVentanaCondOps_p, decode_XVentanaCodeOps},
+    { has_xsmtame06v_p, decode_xsmtame06v_ext},
 };
 
 const size_t decoder_table_size = ARRAY_SIZE(decoder_table);
