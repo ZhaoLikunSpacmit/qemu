@@ -245,6 +245,7 @@ const RISCVIsaExtData isa_edata_arr[] = {
     ISA_EXT_DATA_ENTRY(xtheadmempair, PRIV_VERSION_1_11_0, ext_xtheadmempair),
     ISA_EXT_DATA_ENTRY(xtheadsync, PRIV_VERSION_1_11_0, ext_xtheadsync),
     ISA_EXT_DATA_ENTRY(xventanacondops, PRIV_VERSION_1_12_0, ext_XVentanaCondOps),
+    ISA_EXT_DATA_ENTRY(xsmtame06v, PRIV_VERSION_1_12_0, ext_xsmtame06v),
 
     { },
 };
@@ -639,6 +640,32 @@ static void riscv_cpu_dump_state(CPUState *cs, FILE *f, int flags)
             qemu_fprintf(f, "\n");
         }
     }
+
+    if (cpu->cfg.ext_xsmtame06v && (flags & CPU_DUMP_VPU)) {
+        qemu_fprintf(f, " %-8s " TARGET_FMT_lx "\n", "mtilem", env->mtilem);
+        qemu_fprintf(f, " %-8s " TARGET_FMT_lx "\n", "mtilen", env->mtilen);
+        qemu_fprintf(f, " %-8s " TARGET_FMT_lx "\n", "mtilek", env->mtilek);
+
+        for (i = 0; i < AME_NR_TILES; i++) {
+            int tlenb = ame_cfg_tlenb(&cpu->cfg);
+            qemu_fprintf(f, " tile%d    ", i);
+            p = (uint8_t *)env->ame_tile + i * tlenb;
+            for (j = tlenb - 1; j >= 0; j--) {
+                qemu_fprintf(f, "%02x", p[j]);
+            }
+            qemu_fprintf(f, "\n");
+        }
+
+        for (i = 0; i < AME_NR_ACCS; i++) {
+            int acc_len_b = ame_cfg_acc_len_b(&cpu->cfg);
+            qemu_fprintf(f, " acc%d     ", i);
+            p = (uint8_t *)env->ame_acc + i * acc_len_b;
+            for (j = 63; j >= 0; j--) {
+                qemu_fprintf(f, "%02x", p[j]);
+            }
+            qemu_fprintf(f, "...\n");
+        }
+    }
 }
 
 static void riscv_cpu_set_pc(CPUState *cs, vaddr value)
@@ -781,6 +808,17 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type)
     /* Default NaN value: sign bit clear, frac msb set */
     set_float_default_nan_pattern(0b01000000, &env->fp_status);
     env->vill = true;
+
+    if (cpu->cfg.ext_xsmtame06v) {
+        memset(env->ame_tile, 0, sizeof(env->ame_tile));
+        memset(env->ame_acc, 0, sizeof(env->ame_acc));
+        env->mtilem = ame_cfg_rownum(&cpu->cfg);
+        env->mtilen = ame_cfg_rownum(&cpu->cfg);
+        env->mtilek = AME_HW_MAX_K;
+#ifndef CONFIG_USER_ONLY
+        env->mstatus = set_field(env->mstatus, MSTATUS_MS, EXT_STATUS_INITIAL);
+#endif
+    }
 
 #ifndef CONFIG_USER_ONLY
     if (cpu->cfg.debug) {
@@ -1086,6 +1124,11 @@ static bool riscv_cpu_is_dynamic(Object *cpu_obj)
     return object_dynamic_cast(cpu_obj, TYPE_RISCV_DYNAMIC_CPU) != NULL;
 }
 
+static bool riscv_cpu_is_a200_ame(Object *cpu_obj)
+{
+    return object_dynamic_cast(cpu_obj, TYPE_RISCV_CPU_A200_AME) != NULL;
+}
+
 static void riscv_cpu_init(Object *obj)
 {
     RISCVCPUClass *mcc = RISCV_CPU_GET_CLASS(obj);
@@ -1117,12 +1160,18 @@ static void riscv_cpu_init(Object *obj)
     cpu->cfg.pmu_mask = MAKE_64BIT_MASK(3, 16);
     cpu->cfg.vlenb = 128 >> 3;
     cpu->cfg.elen = 64;
+    cpu->cfg.tlenb  = AME_TLEN_DEFAULT >> 3;  /* TLEN default: 1024 bits */
+    cpu->cfg.trlenb = AME_TRLEN_DEFAULT >> 3; /* TRLEN default: 32 bits  */
     cpu->cfg.cbom_blocksize = 64;
     cpu->cfg.cbop_blocksize = 64;
     cpu->cfg.cboz_blocksize = 64;
     cpu->cfg.pmp_regions = 16;
     cpu->env.vext_ver = VEXT_VERSION_1_00_0;
     cpu->cfg.max_satp_mode = -1;
+
+    if (riscv_cpu_is_a200_ame(obj)) {
+        cpu->cfg.ext_xsmtame06v = true;
+    }
 
     if (mcc->def->profile) {
         mcc->def->profile->enabled = true;
@@ -1365,6 +1414,7 @@ const RISCVCPUMultiExtConfig riscv_cpu_vendor_exts[] = {
     MULTI_EXT_CFG_BOOL("xtheadmempair", ext_xtheadmempair, false),
     MULTI_EXT_CFG_BOOL("xtheadsync", ext_xtheadsync, false),
     MULTI_EXT_CFG_BOOL("xventanacondops", ext_XVentanaCondOps, false),
+    MULTI_EXT_CFG_BOOL("xsmtame06v", ext_xsmtame06v, false),
 
     { },
 };
@@ -1796,6 +1846,104 @@ static const PropertyInfo prop_elen = {
     .description = "elen",
     .get = prop_elen_get,
     .set = prop_elen_set,
+};
+
+/* ---- AME: tlen (TLEN in bits, must be power of 2, max AME_TILE_LEN_B*8) --- */
+static void prop_ame_tlen_set(Object *obj, Visitor *v, const char *name,
+                              void *opaque, Error **errp)
+{
+    RISCVCPU *cpu = RISCV_CPU(obj);
+    uint32_t cpu_tlen = (uint32_t)cpu->cfg.tlenb << 3;
+    uint32_t value;
+
+    if (!visit_type_uint32(v, name, &value, errp)) {
+        return;
+    }
+
+    if (!is_power_of_2(value)) {
+        error_setg(errp, "AME extension TLEN must be a power of 2");
+        return;
+    }
+
+    if (value > (uint32_t)AME_TILE_LEN_B << 3) {
+        error_setg(errp,
+                   "AME extension TLEN must not exceed %u bits",
+                   (uint32_t)AME_TILE_LEN_B << 3);
+        return;
+    }
+
+    if (value != cpu_tlen && riscv_cpu_is_vendor(obj)) {
+        cpu_set_prop_err(cpu, name, errp);
+        error_append_hint(errp, "Current '%s' val: %u\n", name, cpu_tlen);
+        return;
+    }
+
+    cpu_option_add_user_setting(name, value);
+    cpu->cfg.tlenb = value >> 3;
+}
+
+static void prop_ame_tlen_get(Object *obj, Visitor *v, const char *name,
+                              void *opaque, Error **errp)
+{
+    uint32_t value = (uint32_t)RISCV_CPU(obj)->cfg.tlenb << 3;
+
+    visit_type_uint32(v, name, &value, errp);
+}
+
+static const PropertyInfo prop_ame_tlen = {
+    .type = "uint32",
+    .description = "ame_tlen",
+    .get = prop_ame_tlen_get,
+    .set = prop_ame_tlen_set,
+};
+
+/* ---- AME: trlen (TRLEN in bits, must be power of 2, <= tlen) ------------- */
+static void prop_ame_trlen_set(Object *obj, Visitor *v, const char *name,
+                               void *opaque, Error **errp)
+{
+    RISCVCPU *cpu = RISCV_CPU(obj);
+    uint32_t cpu_trlen = (uint32_t)cpu->cfg.trlenb << 3;
+    uint32_t value;
+
+    if (!visit_type_uint32(v, name, &value, errp)) {
+        return;
+    }
+
+    if (!is_power_of_2(value)) {
+        error_setg(errp, "AME extension TRLEN must be a power of 2");
+        return;
+    }
+
+    if (value > (uint32_t)AME_TILE_LEN_B << 3) {
+        error_setg(errp,
+                   "AME extension TRLEN must not exceed TLEN (%u bits max)",
+                   (uint32_t)AME_TILE_LEN_B << 3);
+        return;
+    }
+
+    if (value != cpu_trlen && riscv_cpu_is_vendor(obj)) {
+        cpu_set_prop_err(cpu, name, errp);
+        error_append_hint(errp, "Current '%s' val: %u\n", name, cpu_trlen);
+        return;
+    }
+
+    cpu_option_add_user_setting(name, value);
+    cpu->cfg.trlenb = value >> 3;
+}
+
+static void prop_ame_trlen_get(Object *obj, Visitor *v, const char *name,
+                               void *opaque, Error **errp)
+{
+    uint32_t value = (uint32_t)RISCV_CPU(obj)->cfg.trlenb << 3;
+
+    visit_type_uint32(v, name, &value, errp);
+}
+
+static const PropertyInfo prop_ame_trlen = {
+    .type = "uint32",
+    .description = "ame_trlen",
+    .get = prop_ame_trlen_get,
+    .set = prop_ame_trlen_set,
 };
 
 static void prop_cbom_blksize_set(Object *obj, Visitor *v, const char *name,
@@ -2613,6 +2761,9 @@ static const Property riscv_cpu_properties[] = {
     {.name = "vlen", .info = &prop_vlen},
     {.name = "elen", .info = &prop_elen},
 
+    {.name = "ame_tlen",  .info = &prop_ame_tlen},
+    {.name = "ame_trlen", .info = &prop_ame_trlen},
+
     {.name = "cbom_blocksize", .info = &prop_cbom_blksize},
     {.name = "cbop_blocksize", .info = &prop_cbop_blksize},
     {.name = "cboz_blocksize", .info = &prop_cboz_blksize},
@@ -3047,6 +3198,11 @@ static const TypeInfo riscv_cpu_type_infos[] = {
 
 #if defined(TARGET_RISCV64)
     DEFINE_RISCV_CPU(TYPE_RISCV_CPU_BASE64, TYPE_RISCV_DYNAMIC_CPU,
+        .cfg.max_satp_mode = VM_1_10_SV57,
+        .misa_mxl_max = MXL_RV64,
+    ),
+
+    DEFINE_RISCV_CPU(TYPE_RISCV_CPU_A200_AME, TYPE_RISCV_DYNAMIC_CPU,
         .cfg.max_satp_mode = VM_1_10_SV57,
         .misa_mxl_max = MXL_RV64,
     ),

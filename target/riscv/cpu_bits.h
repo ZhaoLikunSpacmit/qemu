@@ -607,6 +607,10 @@
 /* Zcmt Extension */
 #define CSR_JVT             0x017
 
+/* AME (Accelerated Matrix Extension) CSR addresses */
+#define CSR_MTILEM          0x803
+#define CSR_MTILEN          0x804
+#define CSR_MTILEK          0x805
 /* mstatus CSR bits */
 #define MSTATUS_UIE         0x00000001
 #define MSTATUS_SIE         0x00000002
@@ -628,6 +632,7 @@
 #define MSTATUS_TSR         0x00400000 /* since: priv-1.10 */
 #define MSTATUS_SPELP       0x00800000 /* zicfilp */
 #define MSTATUS_SDT         0x01000000
+#define MSTATUS_MS          0x06000000 /* bits [26:25], AME matrix status */
 #define MSTATUS_MPELP       0x020000000000 /* zicfilp */
 #define MSTATUS_GVA         0x4000000000ULL
 #define MSTATUS_MPV         0x8000000000ULL
@@ -663,6 +668,7 @@ typedef enum {
 #define SSTATUS_SPELP       MSTATUS_SPELP   /* zicfilp */
 #define SSTATUS_SDT         MSTATUS_SDT
 
+#define MSTATUS_MS          0x06000000 /* bits [26:25], AME matrix status */
 #define SSTATUS64_UXL       0x0000000300000000ULL
 
 #define SSTATUS32_SD        0x80000000

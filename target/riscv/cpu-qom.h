@@ -30,6 +30,7 @@
 #define RISCV_CPU_TYPE_NAME(name) (name RISCV_CPU_TYPE_SUFFIX)
 
 #define TYPE_RISCV_CPU_MAX              RISCV_CPU_TYPE_NAME("max")
+#define TYPE_RISCV_CPU_A200_AME         RISCV_CPU_TYPE_NAME("a200_ame")
 #define TYPE_RISCV_CPU_MAX32            RISCV_CPU_TYPE_NAME("max32")
 #define TYPE_RISCV_CPU_BASE32           RISCV_CPU_TYPE_NAME("rv32")
 #define TYPE_RISCV_CPU_BASE64           RISCV_CPU_TYPE_NAME("rv64")

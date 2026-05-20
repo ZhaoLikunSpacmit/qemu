@@ -448,6 +448,34 @@ static void riscv_cpu_validate_v(CPURISCVState *env, RISCVCPUConfig *cfg,
     }
 }
 
+static void riscv_cpu_validate_ame(RISCVCPUConfig *cfg, Error **errp)
+{
+    uint32_t tlen  = (uint32_t)cfg->tlenb  << 3;
+    uint32_t trlen = (uint32_t)cfg->trlenb << 3;
+
+    if (!is_power_of_2(tlen) || tlen < 32 ||
+        tlen > (uint32_t)AME_TILE_LEN_B << 3) {
+        error_setg(errp,
+                   "AME extension TLEN must be a power of 2 "
+                   "in the range [32, %u] bits",
+                   (uint32_t)AME_TILE_LEN_B << 3);
+        return;
+    }
+
+    if (!is_power_of_2(trlen) || trlen < 8 || trlen > tlen) {
+        error_setg(errp,
+                   "AME extension TRLEN must be a power of 2 "
+                   "in the range [8, TLEN=%u] bits", tlen);
+        return;
+    }
+
+    /* ROWNUM = TLEN / TRLEN must allow at least one element row */
+    if (tlen < trlen) {
+        error_setg(errp, "AME extension TLEN must be >= TRLEN");
+        return;
+    }
+}
+
 static void riscv_cpu_disable_priv_spec_isa_exts(RISCVCPU *cpu)
 {
     CPURISCVState *env = &cpu->env;
@@ -677,6 +705,14 @@ void riscv_cpu_validate_set_extensions(RISCVCPU *cpu, Error **errp)
 
     if (cpu->cfg.ext_zve32x) {
         riscv_cpu_validate_v(env, &cpu->cfg, &local_err);
+        if (local_err != NULL) {
+            error_propagate(errp, local_err);
+            return;
+        }
+    }
+
+    if (cpu->cfg.ext_xsmtame06v) {
+        riscv_cpu_validate_ame(&cpu->cfg, &local_err);
         if (local_err != NULL) {
             error_propagate(errp, local_err);
             return;

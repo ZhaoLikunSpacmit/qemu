@@ -215,6 +215,31 @@ typedef struct PMUFixedCtrState {
         uint64_t counter_virt_prev[2];
 } PMUFixedCtrState;
 
+/* === AME (Accelerated Matrix Extension) ===
+ * Static upper-bound constants – used for compile-time array sizing only.
+ * TLEN_MAX = 1024 bits → 128 bytes per tile register
+ * TRLEN_MIN = 32 bits  → ROWNUM_MAX = 1024/32 = 32
+ * ELEN_AME  = 32 bits (fixed)
+ * ALEN_MAX  = ELEN * ROWNUM_MAX^2 = 32*32*32/8 = 4096 bytes
+ */
+#define AME_TILE_LEN_B   128
+#define AME_ACC_LEN_B    4096
+#define AME_NR_TILES     4
+#define AME_NR_ACCS      4
+#define AME_HW_MAX_K     4
+
+/* Default values exposed as properties (same as the max above). */
+#define AME_TLEN_DEFAULT   1024
+#define AME_TRLEN_DEFAULT  32
+#define AME_ELEN_AME       32
+
+/* Runtime accessors – read TLEN/TRLEN from cpu_cfg at emulation time. */
+#define ame_cfg_tlenb(cfg)     ((cfg)->tlenb)
+#define ame_cfg_trlenb(cfg)    ((cfg)->trlenb)
+#define ame_cfg_rownum(cfg)    ((cfg)->tlenb / (cfg)->trlenb)
+#define ame_cfg_acc_len_b(cfg) \
+    ((AME_ELEN_AME / 8) * ame_cfg_rownum(cfg) * ame_cfg_rownum(cfg))
+
 struct CPUArchState {
     target_ulong gpr[32];
     target_ulong gprh[32]; /* 64 top bits of the 128-bit registers */
@@ -513,6 +538,12 @@ struct CPUArchState {
     target_ulong rnmip;
     uint64_t rnmi_irqvec;
     uint64_t rnmi_excpvec;
+
+    uint64_t ame_tile[AME_NR_TILES * AME_TILE_LEN_B / 8] QEMU_ALIGNED(16);
+    uint64_t ame_acc[AME_NR_ACCS * AME_ACC_LEN_B / 8] QEMU_ALIGNED(16);
+    target_ulong mtilem;
+    target_ulong mtilen;
+    target_ulong mtilek;
 };
 
 /*
@@ -541,6 +572,7 @@ struct ArchCPU {
 
     GDBFeature dyn_csr_feature;
     GDBFeature dyn_vreg_feature;
+    GDBFeature dyn_xsmtame06v_feature;
 
     /* Configuration Settings */
     RISCVCPUConfig cfg;

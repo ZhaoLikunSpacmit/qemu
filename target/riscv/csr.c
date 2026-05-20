@@ -107,6 +107,19 @@ static RISCVException vs(CPURISCVState *env, int csrno)
     return RISCV_EXCP_ILLEGAL_INST;
 }
 
+#if !defined(CONFIG_USER_ONLY)
+static RISCVException xsmtame06v(CPURISCVState *env, int csrno)
+{
+    if (riscv_cpu_cfg(env)->ext_xsmtame06v) {
+        if (!env->debugger && get_field(env->mstatus, MSTATUS_MS) == 0) {
+            return RISCV_EXCP_ILLEGAL_INST;
+        }
+        return RISCV_EXCP_NONE;
+    }
+    return RISCV_EXCP_ILLEGAL_INST;
+}
+#endif
+
 static RISCVException ctr(CPURISCVState *env, int csrno)
 {
 #if !defined(CONFIG_USER_ONLY)
@@ -1371,6 +1384,59 @@ static RISCVException write_mhpmcounterh(CPURISCVState *env, int csrno,
     return riscv_pmu_write_ctrh(env, val, ctr_idx);
 }
 
+static RISCVException read_mtilem(CPURISCVState *env, int csrno,
+                                  target_ulong *val)
+{
+    *val = env->mtilem;
+    return RISCV_EXCP_NONE;
+}
+
+static RISCVException write_mtilem(CPURISCVState *env, int csrno,
+                                   target_ulong val, uintptr_t ra)
+{
+    if (val > ame_cfg_rownum(&env_archcpu(env)->cfg)) {
+        return RISCV_EXCP_ILLEGAL_INST;
+    }
+
+    env->mtilem = val;
+    return RISCV_EXCP_NONE;
+}
+
+static RISCVException read_mtilen(CPURISCVState *env, int csrno,
+                                  target_ulong *val)
+{
+    *val = env->mtilen;
+    return RISCV_EXCP_NONE;
+}
+
+static RISCVException write_mtilen(CPURISCVState *env, int csrno,
+                                   target_ulong val, uintptr_t ra)
+{
+    if (val > ame_cfg_rownum(&env_archcpu(env)->cfg)) {
+        return RISCV_EXCP_ILLEGAL_INST;
+    }
+
+    env->mtilen = val;
+    return RISCV_EXCP_NONE;
+}
+
+static RISCVException read_mtilek(CPURISCVState *env, int csrno,
+                                  target_ulong *val)
+{
+    *val = env->mtilek;
+    return RISCV_EXCP_NONE;
+}
+
+static RISCVException write_mtilek(CPURISCVState *env, int csrno,
+                                   target_ulong val, uintptr_t ra)
+{
+    if (val > AME_HW_MAX_K) {
+        return RISCV_EXCP_ILLEGAL_INST;
+    }
+
+    env->mtilek = val;
+    return RISCV_EXCP_NONE;
+}
 RISCVException riscv_pmu_read_ctr(CPURISCVState *env, target_ulong *val,
                                          bool upper_half, uint32_t ctr_idx)
 {
@@ -2009,6 +2075,9 @@ static RISCVException write_mstatus(CPURISCVState *env, int csrno,
 
     if (riscv_cpu_cfg(env)->ext_zve32x) {
         mask |= MSTATUS_VS;
+    }
+    if (riscv_cpu_cfg(env)->ext_xsmtame06v) {
+        mask |= MSTATUS_MS;
     }
 
     if (riscv_env_smode_dbltrp_enabled(env, env->virt_enabled)) {
@@ -6669,6 +6738,8 @@ riscv_csr_operations csr_ops[CSR_TABLE_SIZE] = {
                              write_mhpmcounterh                         },
     [CSR_SCOUNTOVF]      = { "scountovf", sscofpmf,  read_scountovf,
                              .min_priv_ver = PRIV_VERSION_1_12_0 },
-
+    [CSR_MTILEM]         = { "mtilem",    xsmtame06v,  read_mtilem, write_mtilem },
+    [CSR_MTILEN]         = { "mtilen",    xsmtame06v,  read_mtilen, write_mtilen },
+    [CSR_MTILEK]         = { "mtilek",    xsmtame06v,  read_mtilek, write_mtilek },
 #endif /* !CONFIG_USER_ONLY */
 };

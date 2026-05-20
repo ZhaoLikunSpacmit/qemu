@@ -339,6 +339,165 @@ static GDBFeature *ricsv_gen_dynamic_vector_feature(CPUState *cs, int base_reg)
     return &cpu->dyn_vreg_feature;
 }
 
+static int riscv_gdb_get_xsmtame06v(CPUState *cs, GByteArray *buf, int n)
+{
+    RISCVCPU *cpu = RISCV_CPU(cs);
+    CPURISCVState *env = &cpu->env;
+    int tlenb        = ame_cfg_tlenb(&cpu->cfg);
+    int acc_nr_rows  = ame_cfg_rownum(&cpu->cfg);
+    int acc_row_lenb = ame_cfg_acc_len_b(&cpu->cfg) / acc_nr_rows;
+    int idx;
+
+    if (n < AME_NR_TILES) {
+        uint8_t *base = (uint8_t *)env->ame_tile + n * tlenb;
+        int cnt = 0;
+
+        for (int i = 0; i < tlenb; i += 8) {
+            cnt += gdb_get_reg64(buf, *(uint64_t *)(base + i));
+        }
+        return cnt;
+    }
+
+    idx = n - AME_NR_TILES;
+    if (idx < AME_NR_ACCS * acc_nr_rows) {
+        int acc_id = idx / acc_nr_rows;
+        int row_id = idx % acc_nr_rows;
+        uint8_t *base = (uint8_t *)env->ame_acc +
+                        acc_id * ame_cfg_acc_len_b(&cpu->cfg) +
+                        row_id * acc_row_lenb;
+        int cnt = 0;
+
+        for (int i = 0; i < acc_row_lenb; i += 8) {
+            cnt += gdb_get_reg64(buf, *(uint64_t *)(base + i));
+        }
+        return cnt;
+    }
+
+    idx -= AME_NR_ACCS * acc_nr_rows;
+    if (idx == 0) {
+        return gdb_get_regl(buf, env->mtilem);
+    } else if (idx == 1) {
+        return gdb_get_regl(buf, env->mtilen);
+    } else if (idx == 2) {
+        return gdb_get_regl(buf, env->mtilek);
+    }
+
+    return 0;
+}
+
+static int riscv_gdb_set_xsmtame06v(CPUState *cs, uint8_t *mem_buf, int n)
+{
+    RISCVCPU *cpu = RISCV_CPU(cs);
+    CPURISCVState *env = &cpu->env;
+    int idx;
+
+    int tlenb        = ame_cfg_tlenb(&cpu->cfg);
+    int acc_nr_rows  = ame_cfg_rownum(&cpu->cfg);
+    int acc_row_lenb = ame_cfg_acc_len_b(&cpu->cfg) / acc_nr_rows;
+
+    if (n < AME_NR_TILES) {
+        uint8_t *base = (uint8_t *)env->ame_tile + n * tlenb;
+
+        for (int i = 0; i < tlenb; i += 8) {
+            *(uint64_t *)(base + i) = ldq_p(mem_buf + i);
+        }
+        return tlenb;
+    }
+
+    idx = n - AME_NR_TILES;
+    if (idx < AME_NR_ACCS * acc_nr_rows) {
+        int acc_id = idx / acc_nr_rows;
+        int row_id = idx % acc_nr_rows;
+        uint8_t *base = (uint8_t *)env->ame_acc +
+                        acc_id * ame_cfg_acc_len_b(&cpu->cfg) +
+                        row_id * acc_row_lenb;
+
+        for (int i = 0; i < acc_row_lenb; i += 8) {
+            *(uint64_t *)(base + i) = ldq_p(mem_buf + i);
+        }
+        return acc_row_lenb;
+    }
+
+    idx -= AME_NR_ACCS * acc_nr_rows;
+    if (idx == 0) {
+        env->mtilem = ldtul_p(mem_buf);
+        return sizeof(target_ulong);
+    } else if (idx == 1) {
+        env->mtilen = ldtul_p(mem_buf);
+        return sizeof(target_ulong);
+    } else if (idx == 2) {
+        env->mtilek = ldtul_p(mem_buf);
+        return sizeof(target_ulong);
+    }
+
+    return 0;
+}
+
+static const char * const ame_tile_regnames[AME_NR_TILES] = {
+    "tile0", "tile1", "tile2", "tile3"
+};
+
+static GDBFeature *riscv_gen_dynamic_xsmtame06v_feature(CPUState *cs,
+                                                          int base_reg)
+{
+    RISCVCPU *cpu = RISCV_CPU(cs);
+    GDBFeatureBuilder builder;
+    int reg_num = 0;
+
+    gdb_feature_builder_init(&builder, &cpu->dyn_xsmtame06v_feature,
+                             "org.gnu.gdb.riscv.xsmtame06v",
+                             "riscv-xsmtame06v.xml",
+                             base_reg);
+
+    int tlenb        = ame_cfg_tlenb(&cpu->cfg);
+    int acc_nr_rows  = ame_cfg_rownum(&cpu->cfg);
+    int acc_row_lenb = ame_cfg_acc_len_b(&cpu->cfg) / acc_nr_rows;
+
+    gdb_feature_builder_append_tag(&builder, "<struct id=\"ame_tile\">");
+    for (int i = 0; i < tlenb / 8; i++) {
+        gdb_feature_builder_append_tag(&builder,
+                                       "<field name=\"d%d\" type=\"uint64\"/>",
+                                       i);
+    }
+    gdb_feature_builder_append_tag(&builder, "</struct>");
+
+    gdb_feature_builder_append_tag(&builder, "<struct id=\"ame_acc_row\">");
+    for (int i = 0; i < acc_row_lenb / 4; i++) {
+        gdb_feature_builder_append_tag(&builder,
+                                       "<field name=\"f%d\" type=\"ieee_single\"/>",
+                                       i);
+    }
+    gdb_feature_builder_append_tag(&builder, "</struct>");
+
+    for (int i = 0; i < AME_NR_TILES; i++) {
+        gdb_feature_builder_append_reg(&builder, ame_tile_regnames[i],
+                                       tlenb * 8, reg_num++,
+                                       "ame_tile", "matrix");
+    }
+
+    for (int i = 0; i < AME_NR_ACCS; i++) {
+        for (int r = 0; r < acc_nr_rows; r++) {
+            gdb_feature_builder_append_reg(&builder,
+                                           g_strdup_printf("acc%d_row%d", i, r),
+                                           acc_row_lenb * 8, reg_num++,
+                                           "ame_acc_row", "matrix");
+        }
+    }
+
+    gdb_feature_builder_append_reg(&builder, "mtilem",
+                                   TARGET_LONG_BITS, reg_num++,
+                                   "int", "matrix");
+    gdb_feature_builder_append_reg(&builder, "mtilen",
+                                   TARGET_LONG_BITS, reg_num++,
+                                   "int", "matrix");
+    gdb_feature_builder_append_reg(&builder, "mtilek",
+                                   TARGET_LONG_BITS, reg_num++,
+                                   "int", "matrix");
+
+    gdb_feature_builder_end(&builder);
+    return &cpu->dyn_xsmtame06v_feature;
+}
+
 void riscv_cpu_register_gdb_regs_for_features(CPUState *cs)
 {
     RISCVCPUClass *mcc = RISCV_CPU_GET_CLASS(cs);
@@ -357,6 +516,12 @@ void riscv_cpu_register_gdb_regs_for_features(CPUState *cs)
         gdb_register_coprocessor(cs, riscv_gdb_get_vector,
                                  riscv_gdb_set_vector,
                                  ricsv_gen_dynamic_vector_feature(cs, cs->gdb_num_regs),
+                                 0);
+    }
+    if (cpu->cfg.ext_xsmtame06v) {
+        gdb_register_coprocessor(cs, riscv_gdb_get_xsmtame06v,
+                                 riscv_gdb_set_xsmtame06v,
+                                 riscv_gen_dynamic_xsmtame06v_feature(cs, cs->gdb_num_regs),
                                  0);
     }
     switch (mcc->def->misa_mxl_max) {
