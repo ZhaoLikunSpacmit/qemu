@@ -215,7 +215,7 @@ typedef struct PMUFixedCtrState {
         uint64_t counter_virt_prev[2];
 } PMUFixedCtrState;
 
-/* === AME (Accelerated Matrix Extension) ===
+/* === AME (Attached Matrix Extension) ===
  * Static upper-bound constants – used for compile-time array sizing only.
  * TLEN_MAX = 1024 bits → 128 bytes per tile register
  * TRLEN_MIN = 32 bits  → ROWNUM_MAX = 1024/32 = 32
@@ -226,9 +226,9 @@ typedef struct PMUFixedCtrState {
 #define AME_ACC_LEN_B    4096
 #define AME_NR_TILES     4
 #define AME_NR_ACCS      4
-#define AME_HW_MAX_K     4
+#define AME_MIN_EEW_BITS 8
 
-/* Default values exposed as properties (same as the max above). */
+/* Default values exposed as properties. */
 #define AME_TLEN_DEFAULT   1024
 #define AME_TRLEN_DEFAULT  32
 #define AME_ELEN_AME       32
@@ -237,6 +237,9 @@ typedef struct PMUFixedCtrState {
 #define ame_cfg_tlenb(cfg)     ((cfg)->tlenb)
 #define ame_cfg_trlenb(cfg)    ((cfg)->trlenb)
 #define ame_cfg_rownum(cfg)    ((cfg)->tlenb / (cfg)->trlenb)
+#define ame_cfg_kmax_eew(cfg, eew_bits) \
+    ((ame_cfg_trlenb(cfg) * 8) / (eew_bits))
+#define ame_cfg_kmax(cfg)      ame_cfg_kmax_eew(cfg, AME_MIN_EEW_BITS)
 #define ame_cfg_acc_len_b(cfg) \
     ((AME_ELEN_AME / 8) * ame_cfg_rownum(cfg) * ame_cfg_rownum(cfg))
 
@@ -572,7 +575,7 @@ struct ArchCPU {
 
     GDBFeature dyn_csr_feature;
     GDBFeature dyn_vreg_feature;
-    GDBFeature dyn_xsmtame06v_feature;
+    GDBFeature dyn_xsmtamev06_feature;
 
     /* Configuration Settings */
     RISCVCPUConfig cfg;

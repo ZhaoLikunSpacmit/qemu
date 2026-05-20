@@ -152,17 +152,17 @@ static const VMStateDescription vmstate_vector = {
     }
 };
 
-static bool xsmtame06v_needed(void *opaque)
+static bool xsmtamev06_needed(void *opaque)
 {
     RISCVCPU *cpu = opaque;
-    return cpu->cfg.ext_xsmtame06v;
+    return cpu->cfg.ext_xsmtamev06;
 }
 
-static const VMStateDescription vmstate_xsmtame06v = {
-    .name = "cpu/xsmtame06v",
+static const VMStateDescription vmstate_xsmtamev06 = {
+    .name = "cpu/xsmtamev06",
     .version_id = 1,
     .minimum_version_id = 1,
-    .needed = xsmtame06v_needed,
+    .needed = xsmtamev06_needed,
     .fields = (const VMStateField[]) {
         VMSTATE_UINT64_ARRAY(env.ame_tile, RISCVCPU,
                              AME_NR_TILES * AME_TILE_LEN_B / 8),
@@ -488,7 +488,7 @@ const VMStateDescription vmstate_riscv_cpu = {
         &vmstate_pmp,
         &vmstate_hyper,
         &vmstate_vector,
-        &vmstate_xsmtame06v,
+        &vmstate_xsmtamev06,
         &vmstate_pointermasking,
         &vmstate_rv128,
 #ifdef CONFIG_KVM

@@ -607,7 +607,7 @@
 /* Zcmt Extension */
 #define CSR_JVT             0x017
 
-/* AME (Accelerated Matrix Extension) CSR addresses */
+/* AME (Attached Matrix Extension) CSR addresses */
 #define CSR_MTILEM          0x803
 #define CSR_MTILEN          0x804
 #define CSR_MTILEK          0x805

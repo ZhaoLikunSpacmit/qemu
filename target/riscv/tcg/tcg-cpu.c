@@ -711,7 +711,7 @@ void riscv_cpu_validate_set_extensions(RISCVCPU *cpu, Error **errp)
         }
     }
 
-    if (cpu->cfg.ext_xsmtame06v) {
+    if (cpu->cfg.ext_xsmtamev06) {
         riscv_cpu_validate_ame(&cpu->cfg, &local_err);
         if (local_err != NULL) {
             error_propagate(errp, local_err);

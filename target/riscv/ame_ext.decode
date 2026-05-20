@@ -1,5 +1,5 @@
 #
-# RISC-V AME (Accelerated Matrix Extension) instruction encodings
+# RISC-V AME (Attached Matrix Extension) instruction encodings
 #
 # Opcode: custom-1 = 0101011 (0x2b)
 #

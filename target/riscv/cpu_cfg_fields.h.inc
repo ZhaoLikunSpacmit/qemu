@@ -147,7 +147,7 @@ BOOL_FIELD(ext_xtheadmemidx)
 BOOL_FIELD(ext_xtheadmempair)
 BOOL_FIELD(ext_xtheadsync)
 BOOL_FIELD(ext_XVentanaCondOps)
-BOOL_FIELD(ext_xsmtame06v)
+BOOL_FIELD(ext_xsmtamev06)
 
 BOOL_FIELD(mmu)
 BOOL_FIELD(pmp)

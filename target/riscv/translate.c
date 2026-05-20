@@ -751,12 +751,12 @@ static inline void mark_ms_dirty(DisasContext *ctx) { }
 #endif
 
 /*
- * require_xsmtame06v — check that XSmtAme06v extension is enabled.
+ * require_xsmtamev06 — check that XSmtAmeV06 extension is enabled.
  * Returns true if AME instructions can proceed.
  */
-static bool require_xsmtame06v(DisasContext *ctx)
+static bool require_xsmtamev06(DisasContext *ctx)
 {
-    return ctx->cfg_ptr->ext_xsmtame06v;
+    return ctx->cfg_ptr->ext_xsmtamev06;
 }
 
 static void finalize_rvv_inst(DisasContext *ctx)
@@ -1251,7 +1251,7 @@ const RISCVDecoder decoder_table[] = {
     { always_true_p, decode_insn32 },
     { has_xthead_p, decode_xthead},
     { has_XVentanaCondOps_p, decode_XVentanaCodeOps},
-    { has_xsmtame06v_p, decode_xsmtame06v_ext},
+    { has_xsmtamev06_p, decode_xsmtamev06_ext},
 };
 
 const size_t decoder_table_size = ARRAY_SIZE(decoder_table);

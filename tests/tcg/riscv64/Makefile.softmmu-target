@@ -25,7 +25,7 @@ run-test-mepc-masking: test-mepc-masking
 	$(call run-test, $<, $(QEMU) $(QEMU_OPTS)$<)
 
 EXTRA_RUNS += run-test-ame-csr
-run-test-ame-csr: QEMU_OPTS += -cpu rv64,xsmtame06v=true
+run-test-ame-csr: QEMU_OPTS += -cpu rv64,xsmtamev06=true
 run-test-ame-csr: test-ame-csr
 	$(call run-test, $<, $(QEMU) $(QEMU_OPTS)$<)
 
@@ -34,7 +34,7 @@ GDB_SCRIPT=$(SRC_PATH)/tests/guest-debug/run-test.py
 MULTIARCH_SRC=$(SRC_PATH)/tests/tcg/multiarch
 
 EXTRA_RUNS += run-gdbstub-ame-registers
-run-gdbstub-ame-registers: QEMU_OPTS += -cpu rv64,xsmtame06v=true
+run-gdbstub-ame-registers: QEMU_OPTS += -cpu rv64,xsmtamev06=true
 run-gdbstub-ame-registers: test-ame-csr
 	$(call run-test, $@, $(GDB_SCRIPT) \
 		--gdb $(GDB) \

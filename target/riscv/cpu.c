@@ -245,7 +245,7 @@ const RISCVIsaExtData isa_edata_arr[] = {
     ISA_EXT_DATA_ENTRY(xtheadmempair, PRIV_VERSION_1_11_0, ext_xtheadmempair),
     ISA_EXT_DATA_ENTRY(xtheadsync, PRIV_VERSION_1_11_0, ext_xtheadsync),
     ISA_EXT_DATA_ENTRY(xventanacondops, PRIV_VERSION_1_12_0, ext_XVentanaCondOps),
-    ISA_EXT_DATA_ENTRY(xsmtame06v, PRIV_VERSION_1_12_0, ext_xsmtame06v),
+    ISA_EXT_DATA_ENTRY(xsmtamev06, PRIV_VERSION_1_12_0, ext_xsmtamev06),
 
     { },
 };
@@ -641,7 +641,7 @@ static void riscv_cpu_dump_state(CPUState *cs, FILE *f, int flags)
         }
     }
 
-    if (cpu->cfg.ext_xsmtame06v && (flags & CPU_DUMP_VPU)) {
+    if (cpu->cfg.ext_xsmtamev06 && (flags & CPU_DUMP_VPU)) {
         qemu_fprintf(f, " %-8s " TARGET_FMT_lx "\n", "mtilem", env->mtilem);
         qemu_fprintf(f, " %-8s " TARGET_FMT_lx "\n", "mtilen", env->mtilen);
         qemu_fprintf(f, " %-8s " TARGET_FMT_lx "\n", "mtilek", env->mtilek);
@@ -809,12 +809,12 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type)
     set_float_default_nan_pattern(0b01000000, &env->fp_status);
     env->vill = true;
 
-    if (cpu->cfg.ext_xsmtame06v) {
+    if (cpu->cfg.ext_xsmtamev06) {
         memset(env->ame_tile, 0, sizeof(env->ame_tile));
         memset(env->ame_acc, 0, sizeof(env->ame_acc));
         env->mtilem = ame_cfg_rownum(&cpu->cfg);
         env->mtilen = ame_cfg_rownum(&cpu->cfg);
-        env->mtilek = AME_HW_MAX_K;
+        env->mtilek = ame_cfg_kmax(&cpu->cfg);
 #ifndef CONFIG_USER_ONLY
         env->mstatus = set_field(env->mstatus, MSTATUS_MS, EXT_STATUS_INITIAL);
 #endif
@@ -1124,11 +1124,6 @@ static bool riscv_cpu_is_dynamic(Object *cpu_obj)
     return object_dynamic_cast(cpu_obj, TYPE_RISCV_DYNAMIC_CPU) != NULL;
 }
 
-static bool riscv_cpu_is_a200_ame(Object *cpu_obj)
-{
-    return object_dynamic_cast(cpu_obj, TYPE_RISCV_CPU_A200_AME) != NULL;
-}
-
 static void riscv_cpu_init(Object *obj)
 {
     RISCVCPUClass *mcc = RISCV_CPU_GET_CLASS(obj);
@@ -1168,10 +1163,6 @@ static void riscv_cpu_init(Object *obj)
     cpu->cfg.pmp_regions = 16;
     cpu->env.vext_ver = VEXT_VERSION_1_00_0;
     cpu->cfg.max_satp_mode = -1;
-
-    if (riscv_cpu_is_a200_ame(obj)) {
-        cpu->cfg.ext_xsmtame06v = true;
-    }
 
     if (mcc->def->profile) {
         mcc->def->profile->enabled = true;
@@ -1414,7 +1405,7 @@ const RISCVCPUMultiExtConfig riscv_cpu_vendor_exts[] = {
     MULTI_EXT_CFG_BOOL("xtheadmempair", ext_xtheadmempair, false),
     MULTI_EXT_CFG_BOOL("xtheadsync", ext_xtheadsync, false),
     MULTI_EXT_CFG_BOOL("xventanacondops", ext_XVentanaCondOps, false),
-    MULTI_EXT_CFG_BOOL("xsmtame06v", ext_xsmtame06v, false),
+    MULTI_EXT_CFG_BOOL("xsmtamev06", ext_xsmtamev06, false),
 
     { },
 };
@@ -3198,11 +3189,6 @@ static const TypeInfo riscv_cpu_type_infos[] = {
 
 #if defined(TARGET_RISCV64)
     DEFINE_RISCV_CPU(TYPE_RISCV_CPU_BASE64, TYPE_RISCV_DYNAMIC_CPU,
-        .cfg.max_satp_mode = VM_1_10_SV57,
-        .misa_mxl_max = MXL_RV64,
-    ),
-
-    DEFINE_RISCV_CPU(TYPE_RISCV_CPU_A200_AME, TYPE_RISCV_DYNAMIC_CPU,
         .cfg.max_satp_mode = VM_1_10_SV57,
         .misa_mxl_max = MXL_RV64,
     ),

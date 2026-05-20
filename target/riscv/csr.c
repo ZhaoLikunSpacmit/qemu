@@ -108,9 +108,9 @@ static RISCVException vs(CPURISCVState *env, int csrno)
 }
 
 #if !defined(CONFIG_USER_ONLY)
-static RISCVException xsmtame06v(CPURISCVState *env, int csrno)
+static RISCVException xsmtamev06(CPURISCVState *env, int csrno)
 {
-    if (riscv_cpu_cfg(env)->ext_xsmtame06v) {
+    if (riscv_cpu_cfg(env)->ext_xsmtamev06) {
         if (!env->debugger && get_field(env->mstatus, MSTATUS_MS) == 0) {
             return RISCV_EXCP_ILLEGAL_INST;
         }
@@ -1430,7 +1430,7 @@ static RISCVException read_mtilek(CPURISCVState *env, int csrno,
 static RISCVException write_mtilek(CPURISCVState *env, int csrno,
                                    target_ulong val, uintptr_t ra)
 {
-    if (val > AME_HW_MAX_K) {
+    if (val > ame_cfg_kmax(&env_archcpu(env)->cfg)) {
         return RISCV_EXCP_ILLEGAL_INST;
     }
 
@@ -2076,7 +2076,7 @@ static RISCVException write_mstatus(CPURISCVState *env, int csrno,
     if (riscv_cpu_cfg(env)->ext_zve32x) {
         mask |= MSTATUS_VS;
     }
-    if (riscv_cpu_cfg(env)->ext_xsmtame06v) {
+    if (riscv_cpu_cfg(env)->ext_xsmtamev06) {
         mask |= MSTATUS_MS;
     }
 
@@ -6738,8 +6738,8 @@ riscv_csr_operations csr_ops[CSR_TABLE_SIZE] = {
                              write_mhpmcounterh                         },
     [CSR_SCOUNTOVF]      = { "scountovf", sscofpmf,  read_scountovf,
                              .min_priv_ver = PRIV_VERSION_1_12_0 },
-    [CSR_MTILEM]         = { "mtilem",    xsmtame06v,  read_mtilem, write_mtilem },
-    [CSR_MTILEN]         = { "mtilen",    xsmtame06v,  read_mtilen, write_mtilen },
-    [CSR_MTILEK]         = { "mtilek",    xsmtame06v,  read_mtilek, write_mtilek },
+    [CSR_MTILEM]         = { "mtilem",    xsmtamev06,  read_mtilem, write_mtilem },
+    [CSR_MTILEN]         = { "mtilen",    xsmtamev06,  read_mtilen, write_mtilen },
+    [CSR_MTILEK]         = { "mtilek",    xsmtamev06,  read_mtilek, write_mtilek },
 #endif /* !CONFIG_USER_ONLY */
 };
