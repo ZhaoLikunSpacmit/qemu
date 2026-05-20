@@ -1,5 +1,5 @@
 /*
- * AMEv06 MISC regression tests.
+ * AME MISC regression tests.
  *
  * Copyright (c) 2025
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -417,7 +417,7 @@ static void test_mcslide_tile(void)
 
 int main(void)
 {
-    printf("=== AMEv06 MISC Test ===\n");
+    printf("=== AME MISC Test ===\n");
 
     test_mmov_cross_class_undisturbed();
     test_mmov_scalar_widths();

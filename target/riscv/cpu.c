@@ -245,7 +245,7 @@ const RISCVIsaExtData isa_edata_arr[] = {
     ISA_EXT_DATA_ENTRY(xtheadmempair, PRIV_VERSION_1_11_0, ext_xtheadmempair),
     ISA_EXT_DATA_ENTRY(xtheadsync, PRIV_VERSION_1_11_0, ext_xtheadsync),
     ISA_EXT_DATA_ENTRY(xventanacondops, PRIV_VERSION_1_12_0, ext_XVentanaCondOps),
-    ISA_EXT_DATA_ENTRY(xsmtamev06, PRIV_VERSION_1_12_0, ext_xsmtamev06),
+    ISA_EXT_DATA_ENTRY(xsmtame, PRIV_VERSION_1_12_0, ext_xsmtame),
 
     { },
 };
@@ -641,7 +641,7 @@ static void riscv_cpu_dump_state(CPUState *cs, FILE *f, int flags)
         }
     }
 
-    if (cpu->cfg.ext_xsmtamev06 && (flags & CPU_DUMP_VPU)) {
+    if (cpu->cfg.ext_xsmtame && (flags & CPU_DUMP_VPU)) {
         qemu_fprintf(f, " %-8s " TARGET_FMT_lx "\n", "mtilem", env->mtilem);
         qemu_fprintf(f, " %-8s " TARGET_FMT_lx "\n", "mtilen", env->mtilen);
         qemu_fprintf(f, " %-8s " TARGET_FMT_lx "\n", "mtilek", env->mtilek);
@@ -809,7 +809,7 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type)
     set_float_default_nan_pattern(0b01000000, &env->fp_status);
     env->vill = true;
 
-    if (cpu->cfg.ext_xsmtamev06) {
+    if (cpu->cfg.ext_xsmtame) {
         memset(env->ame_tile, 0, sizeof(env->ame_tile));
         memset(env->ame_acc, 0, sizeof(env->ame_acc));
         env->mtilem = ame_cfg_rownum(&cpu->cfg);
@@ -1405,7 +1405,7 @@ const RISCVCPUMultiExtConfig riscv_cpu_vendor_exts[] = {
     MULTI_EXT_CFG_BOOL("xtheadmempair", ext_xtheadmempair, false),
     MULTI_EXT_CFG_BOOL("xtheadsync", ext_xtheadsync, false),
     MULTI_EXT_CFG_BOOL("xventanacondops", ext_XVentanaCondOps, false),
-    MULTI_EXT_CFG_BOOL("xsmtamev06", ext_xsmtamev06, false),
+    MULTI_EXT_CFG_BOOL("xsmtame", ext_xsmtame, false),
 
     { },
 };
@@ -1935,6 +1935,39 @@ static const PropertyInfo prop_ame_trlen = {
     .description = "ame_trlen",
     .get = prop_ame_trlen_get,
     .set = prop_ame_trlen_set,
+};
+
+/* ---- XSmt AME: supported specification version ------------------------- */
+static void prop_xsmtame_version_set(Object *obj, Visitor *v, const char *name,
+                                     void *opaque, Error **errp)
+{
+    g_autofree char *value = NULL;
+
+    if (!visit_type_str(v, name, &value, errp)) {
+        return;
+    }
+
+    if (strcmp(value, "0.6") != 0) {
+        error_setg(errp,
+                   "unsupported XSmt AME version '%s' (supported: 0.6)",
+                   value);
+        return;
+    }
+}
+
+static void prop_xsmtame_version_get(Object *obj, Visitor *v, const char *name,
+                                     void *opaque, Error **errp)
+{
+    const char *value = "0.6";
+
+    visit_type_str(v, name, (char **)&value, errp);
+}
+
+static const PropertyInfo prop_xsmtame_version = {
+    .type = "string",
+    .description = "XSmt AME specification version (supported: 0.6)",
+    .get = prop_xsmtame_version_get,
+    .set = prop_xsmtame_version_set,
 };
 
 static void prop_cbom_blksize_set(Object *obj, Visitor *v, const char *name,
@@ -2754,6 +2787,7 @@ static const Property riscv_cpu_properties[] = {
 
     {.name = "ame_tlen",  .info = &prop_ame_tlen},
     {.name = "ame_trlen", .info = &prop_ame_trlen},
+    {.name = "xsmtame-version", .info = &prop_xsmtame_version},
 
     {.name = "cbom_blocksize", .info = &prop_cbom_blksize},
     {.name = "cbop_blocksize", .info = &prop_cbop_blksize},

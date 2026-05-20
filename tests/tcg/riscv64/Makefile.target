@@ -20,4 +20,4 @@ test-fcvtmod: LDFLAGS += -static
 run-test-fcvtmod: QEMU_OPTS += -cpu rv64,d=true,zfa=true
 
 TESTS += test-ame-misc
-run-test-ame-misc: QEMU_OPTS += -cpu rv64,xsmtamev06=true
+run-test-ame-misc: QEMU_OPTS += -cpu rv64,xsmtame=true,xsmtame-version=0.6

@@ -36,9 +36,9 @@ static inline bool always_true_p(const RISCVCPUConfig *cfg __attribute__((__unus
     return true;
 }
 
-static inline bool has_xsmtamev06_p(const RISCVCPUConfig *cfg)
+static inline bool has_xsmtame_p(const RISCVCPUConfig *cfg)
 {
-    return cfg->ext_xsmtamev06;
+    return cfg->ext_xsmtame;
 }
 static inline bool has_xthead_p(const RISCVCPUConfig *cfg)
 {

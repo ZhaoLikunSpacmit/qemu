@@ -575,7 +575,7 @@ struct ArchCPU {
 
     GDBFeature dyn_csr_feature;
     GDBFeature dyn_vreg_feature;
-    GDBFeature dyn_xsmtamev06_feature;
+    GDBFeature dyn_xsmtame_feature;
 
     /* Configuration Settings */
     RISCVCPUConfig cfg;

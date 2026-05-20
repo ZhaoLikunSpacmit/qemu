@@ -39,14 +39,14 @@
  */
 
 /* Return pointer to the start of tile[id] inside CPURISCVState */
-static inline uint8_t *xsmtamev06_tile_ptr(CPURISCVState *env, uint32_t id)
+static inline uint8_t *xsmtame_tile_ptr(CPURISCVState *env, uint32_t id)
 {
     g_assert(id < AME_NR_TILES);
     return (uint8_t *)env->ame_tile + id * ame_env_tlenb(env);
 }
 
 /* Return pointer to the start of acc[id] inside CPURISCVState */
-static inline uint8_t *xsmtamev06_acc_ptr(CPURISCVState *env, uint32_t id)
+static inline uint8_t *xsmtame_acc_ptr(CPURISCVState *env, uint32_t id)
 {
     g_assert(id < AME_NR_ACCS);
     return (uint8_t *)env->ame_acc + id * ame_env_acc_len_b(env);
@@ -58,12 +58,12 @@ typedef struct AMEShapeInfo {
     uint32_t k;
 } AMEShapeInfo;
 
-static G_NORETURN void xsmtamev06_raise_illegal(CPURISCVState *env)
+static G_NORETURN void xsmtame_raise_illegal(CPURISCVState *env)
 {
     riscv_raise_exception(env, RISCV_EXCP_ILLEGAL_INST, GETPC());
 }
 
-static inline void xsmtamev06_validate_shape_eew(CPURISCVState *env,
+static inline void xsmtame_validate_shape_eew(CPURISCVState *env,
                                                    uint32_t eew_bits)
 {
     RISCVCPUConfig *cfg = ame_env_cfg(env);
@@ -71,18 +71,18 @@ static inline void xsmtamev06_validate_shape_eew(CPURISCVState *env,
     uint32_t kmax = eew_bits ? ame_cfg_kmax_eew(cfg, eew_bits) : 0;
 
     if (env->mtilem > rownum || env->mtilen > rownum || env->mtilek > kmax) {
-        xsmtamev06_raise_illegal(env);
+        xsmtame_raise_illegal(env);
     }
 }
 
-static inline void xsmtamev06_validate_shape(CPURISCVState *env)
+static inline void xsmtame_validate_shape(CPURISCVState *env)
 {
-    xsmtamev06_validate_shape_eew(env, AME_MIN_EEW_BITS);
+    xsmtame_validate_shape_eew(env, AME_MIN_EEW_BITS);
 }
 
-static inline AMEShapeInfo xsmtamev06_shape(CPURISCVState *env)
+static inline AMEShapeInfo xsmtame_shape(CPURISCVState *env)
 {
-    xsmtamev06_validate_shape(env);
+    xsmtame_validate_shape(env);
 
     return (AMEShapeInfo) {
         .m = env->mtilem,
@@ -91,60 +91,60 @@ static inline AMEShapeInfo xsmtamev06_shape(CPURISCVState *env)
     };
 }
 
-static inline uint16_t *xsmtamev06_tile16_ptr(CPURISCVState *env, uint32_t id)
+static inline uint16_t *xsmtame_tile16_ptr(CPURISCVState *env, uint32_t id)
 {
-    xsmtamev06_validate_shape_eew(env, 16);
+    xsmtame_validate_shape_eew(env, 16);
 
-    return (uint16_t *)xsmtamev06_tile_ptr(env, id);
+    return (uint16_t *)xsmtame_tile_ptr(env, id);
 }
 
-static inline uint32_t *xsmtamev06_tile32_ptr(CPURISCVState *env, uint32_t id)
+static inline uint32_t *xsmtame_tile32_ptr(CPURISCVState *env, uint32_t id)
 {
-    xsmtamev06_validate_shape_eew(env, 32);
+    xsmtame_validate_shape_eew(env, 32);
 
-    return (uint32_t *)xsmtamev06_tile_ptr(env, id);
+    return (uint32_t *)xsmtame_tile_ptr(env, id);
 }
 
-static inline int8_t *xsmtamev06_tile8s_ptr(CPURISCVState *env, uint32_t id)
+static inline int8_t *xsmtame_tile8s_ptr(CPURISCVState *env, uint32_t id)
 {
-    return (int8_t *)xsmtamev06_tile_ptr(env, id);
+    return (int8_t *)xsmtame_tile_ptr(env, id);
 }
 
-static inline uint8_t *xsmtamev06_acc8_ptr(CPURISCVState *env, uint32_t id)
+static inline uint8_t *xsmtame_acc8_ptr(CPURISCVState *env, uint32_t id)
 {
-    return xsmtamev06_acc_ptr(env, id);
+    return xsmtame_acc_ptr(env, id);
 }
 
-static inline uint16_t *xsmtamev06_acc16_ptr(CPURISCVState *env, uint32_t id)
+static inline uint16_t *xsmtame_acc16_ptr(CPURISCVState *env, uint32_t id)
 {
-    return (uint16_t *)xsmtamev06_acc_ptr(env, id);
+    return (uint16_t *)xsmtame_acc_ptr(env, id);
 }
 
-static inline uint32_t *xsmtamev06_acc32_ptr(CPURISCVState *env, uint32_t id)
+static inline uint32_t *xsmtame_acc32_ptr(CPURISCVState *env, uint32_t id)
 {
-    return (uint32_t *)xsmtamev06_acc_ptr(env, id);
+    return (uint32_t *)xsmtame_acc_ptr(env, id);
 }
 
-static inline uint8_t *xsmtamev06_matrix_ptr(CPURISCVState *env, uint32_t reg,
+static inline uint8_t *xsmtame_matrix_ptr(CPURISCVState *env, uint32_t reg,
                                                size_t *size)
 {
-    xsmtamev06_validate_shape(env);
+    xsmtame_validate_shape(env);
 
     if (reg < AME_NR_TILES) {
         if (size) {
             *size = ame_env_tlenb(env);
         }
-        return xsmtamev06_tile_ptr(env, reg);
+        return xsmtame_tile_ptr(env, reg);
     }
 
     g_assert(reg < AME_NR_TILES + AME_NR_ACCS);
     if (size) {
         *size = ame_env_acc_len_b(env);
     }
-    return xsmtamev06_acc_ptr(env, reg - AME_NR_TILES);
+    return xsmtame_acc_ptr(env, reg - AME_NR_TILES);
 }
 
-static inline size_t xsmtamev06_mmov_elem_offset(size_t reg_size,
+static inline size_t xsmtame_mmov_elem_offset(size_t reg_size,
                                                    size_t elem_size,
                                                    target_ulong idx)
 {
@@ -154,7 +154,7 @@ static inline size_t xsmtamev06_mmov_elem_offset(size_t reg_size,
     return elem_idx * elem_size;
 }
 
-static inline size_t xsmtamev06_matrix_row_bytes(CPURISCVState *env,
+static inline size_t xsmtame_matrix_row_bytes(CPURISCVState *env,
                                                    uint32_t reg)
 {
     /* tile row = TRLEN/8 bytes; acc row = (ELEN/8)*ROWNUM bytes */
@@ -163,24 +163,24 @@ static inline size_t xsmtamev06_matrix_row_bytes(CPURISCVState *env,
            ame_env_acc_len_b(env) / ame_env_rownum(env);
 }
 
-static inline size_t xsmtamev06_matrix_col_count(CPURISCVState *env,
+static inline size_t xsmtame_matrix_col_count(CPURISCVState *env,
                                                    uint32_t reg,
                                                    size_t elem_size)
 {
-    size_t row_bytes = xsmtamev06_matrix_row_bytes(env, reg);
+    size_t row_bytes = xsmtame_matrix_row_bytes(env, reg);
 
     g_assert(row_bytes % elem_size == 0);
     return row_bytes / elem_size;
 }
 
-static void xsmtamev06_mmov_m_x_common(CPURISCVState *env, uint32_t md,
+static void xsmtame_mmov_m_x_common(CPURISCVState *env, uint32_t md,
                                          target_ulong idx,
                                          target_ulong value,
                                          size_t elem_size)
 {
     size_t reg_size;
-    uint8_t *dst = xsmtamev06_matrix_ptr(env, md, &reg_size);
-    size_t offset = xsmtamev06_mmov_elem_offset(reg_size, elem_size, idx);
+    uint8_t *dst = xsmtame_matrix_ptr(env, md, &reg_size);
+    size_t offset = xsmtame_mmov_elem_offset(reg_size, elem_size, idx);
 
     switch (elem_size) {
     case 1:
@@ -200,7 +200,7 @@ static void xsmtamev06_mmov_m_x_common(CPURISCVState *env, uint32_t md,
     }
 }
 
-static inline void xsmtamev06_load_tile8_stride(uint8_t *tile,
+static inline void xsmtame_load_tile8_stride(uint8_t *tile,
                                                   CPURISCVState *env,
                                                   target_ulong addr,
                                                   target_ulong stride,
@@ -220,7 +220,7 @@ static inline void xsmtamev06_load_tile8_stride(uint8_t *tile,
     }
 }
 
-static inline void xsmtamev06_store_tile8_stride(const uint8_t *tile,
+static inline void xsmtame_store_tile8_stride(const uint8_t *tile,
                                                    CPURISCVState *env,
                                                    target_ulong addr,
                                                    target_ulong stride,
@@ -240,7 +240,7 @@ static inline void xsmtamev06_store_tile8_stride(const uint8_t *tile,
     }
 }
 
-static inline void xsmtamev06_load_tile16_stride(uint16_t *tile16,
+static inline void xsmtame_load_tile16_stride(uint16_t *tile16,
                                                    CPURISCVState *env,
                                                    target_ulong addr,
                                                    target_ulong stride,
@@ -260,7 +260,7 @@ static inline void xsmtamev06_load_tile16_stride(uint16_t *tile16,
     }
 }
 
-static inline void xsmtamev06_store_tile16_stride(const uint16_t *tile16,
+static inline void xsmtame_store_tile16_stride(const uint16_t *tile16,
                                                     CPURISCVState *env,
                                                     target_ulong addr,
                                                     target_ulong stride,
@@ -280,7 +280,7 @@ static inline void xsmtamev06_store_tile16_stride(const uint16_t *tile16,
     }
 }
 
-static inline void xsmtamev06_load_tile32_stride(uint32_t *tile32,
+static inline void xsmtame_load_tile32_stride(uint32_t *tile32,
                                                    CPURISCVState *env,
                                                    target_ulong addr,
                                                    target_ulong stride,
@@ -300,7 +300,7 @@ static inline void xsmtamev06_load_tile32_stride(uint32_t *tile32,
     }
 }
 
-static inline void xsmtamev06_store_tile32_stride(const uint32_t *tile32,
+static inline void xsmtame_store_tile32_stride(const uint32_t *tile32,
                                                     CPURISCVState *env,
                                                     target_ulong addr,
                                                     target_ulong stride,
@@ -320,7 +320,7 @@ static inline void xsmtamev06_store_tile32_stride(const uint32_t *tile32,
     }
 }
 
-static inline void xsmtamev06_load_acc8_stride(uint8_t *acc8,
+static inline void xsmtame_load_acc8_stride(uint8_t *acc8,
                                                  CPURISCVState *env,
                                                  target_ulong addr,
                                                  target_ulong stride,
@@ -340,7 +340,7 @@ static inline void xsmtamev06_load_acc8_stride(uint8_t *acc8,
     }
 }
 
-static inline void xsmtamev06_store_acc8_stride(const uint8_t *acc8,
+static inline void xsmtame_store_acc8_stride(const uint8_t *acc8,
                                                   CPURISCVState *env,
                                                   target_ulong addr,
                                                   target_ulong stride,
@@ -360,7 +360,7 @@ static inline void xsmtamev06_store_acc8_stride(const uint8_t *acc8,
     }
 }
 
-static inline void xsmtamev06_load_acc16_stride(uint16_t *acc16,
+static inline void xsmtame_load_acc16_stride(uint16_t *acc16,
                                                   CPURISCVState *env,
                                                   target_ulong addr,
                                                   target_ulong stride,
@@ -380,7 +380,7 @@ static inline void xsmtamev06_load_acc16_stride(uint16_t *acc16,
     }
 }
 
-static inline void xsmtamev06_store_acc16_stride(const uint16_t *acc16,
+static inline void xsmtame_store_acc16_stride(const uint16_t *acc16,
                                                    CPURISCVState *env,
                                                    target_ulong addr,
                                                    target_ulong stride,
@@ -400,7 +400,7 @@ static inline void xsmtamev06_store_acc16_stride(const uint16_t *acc16,
     }
 }
 
-static inline void xsmtamev06_load_acc32_stride(uint32_t *acc32,
+static inline void xsmtame_load_acc32_stride(uint32_t *acc32,
                                                   CPURISCVState *env,
                                                   target_ulong addr,
                                                   target_ulong stride,
@@ -420,7 +420,7 @@ static inline void xsmtamev06_load_acc32_stride(uint32_t *acc32,
     }
 }
 
-static inline void xsmtamev06_store_acc32_stride(const uint32_t *acc32,
+static inline void xsmtame_store_acc32_stride(const uint32_t *acc32,
                                                    CPURISCVState *env,
                                                    target_ulong addr,
                                                    target_ulong stride,
@@ -453,214 +453,214 @@ static inline void xsmtamev06_store_acc32_stride(const uint32_t *acc32,
  * msate16/msbte16 use explicit stride and transpose while storing.
  */
 
-void HELPER(xsmtamev06_mlme8)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_mlme8)(CPURISCVState *env, uint32_t td,
                        target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint8_t *tile = xsmtamev06_tile_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint8_t *tile = xsmtame_tile_ptr(env, td);
 
-    xsmtamev06_load_tile8_stride(tile, env, addr, stride,
+    xsmtame_load_tile8_stride(tile, env, addr, stride,
                                    shape.m, shape.k, false);
 }
 
-void HELPER(xsmtamev06_mlae8)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_mlae8)(CPURISCVState *env, uint32_t td,
                        target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint8_t *tile = xsmtamev06_tile_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint8_t *tile = xsmtame_tile_ptr(env, td);
 
-    xsmtamev06_load_tile8_stride(tile, env, addr, stride,
+    xsmtame_load_tile8_stride(tile, env, addr, stride,
                                    shape.m, shape.k, false);
 }
 
-void HELPER(xsmtamev06_mlbe8)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_mlbe8)(CPURISCVState *env, uint32_t td,
                        target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint8_t *tile = xsmtamev06_tile_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint8_t *tile = xsmtame_tile_ptr(env, td);
 
-    xsmtamev06_load_tile8_stride(tile, env, addr, stride,
+    xsmtame_load_tile8_stride(tile, env, addr, stride,
                                    shape.n, shape.k, false);
 }
 
-void HELPER(xsmtamev06_mlate8)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_mlate8)(CPURISCVState *env, uint32_t td,
                        target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint8_t *tile = xsmtamev06_tile_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint8_t *tile = xsmtame_tile_ptr(env, td);
 
-    xsmtamev06_load_tile8_stride(tile, env, addr, stride,
+    xsmtame_load_tile8_stride(tile, env, addr, stride,
                                    shape.m, shape.k, true);
 }
 
-void HELPER(xsmtamev06_mlbte8)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_mlbte8)(CPURISCVState *env, uint32_t td,
                        target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint8_t *tile = xsmtamev06_tile_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint8_t *tile = xsmtame_tile_ptr(env, td);
 
-    xsmtamev06_load_tile8_stride(tile, env, addr, stride,
+    xsmtame_load_tile8_stride(tile, env, addr, stride,
                                    shape.n, shape.k, true);
 }
 
-void HELPER(xsmtamev06_mlme16)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_mlme16)(CPURISCVState *env, uint32_t td,
                         target_ulong addr)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint16_t *tile16 = xsmtamev06_tile16_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
 
-    xsmtamev06_load_tile16_stride(tile16, env, addr,
+    xsmtame_load_tile16_stride(tile16, env, addr,
                                     shape.k * sizeof(*tile16),
                                     shape.m, shape.k, false);
 }
 
-void HELPER(xsmtamev06_mlae16)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_mlae16)(CPURISCVState *env, uint32_t td,
                         target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint16_t *tile16 = xsmtamev06_tile16_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
 
-    xsmtamev06_load_tile16_stride(tile16, env, addr, stride,
+    xsmtame_load_tile16_stride(tile16, env, addr, stride,
                                     shape.m, shape.k, false);
 }
 
-void HELPER(xsmtamev06_mlae32)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_mlae32)(CPURISCVState *env, uint32_t td,
                         target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint32_t *tile32 = xsmtamev06_tile32_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
 
-    xsmtamev06_load_tile32_stride(tile32, env, addr, stride,
+    xsmtame_load_tile32_stride(tile32, env, addr, stride,
                                     shape.m, shape.k, false);
 }
 
-void HELPER(xsmtamev06_mlbe16)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_mlbe16)(CPURISCVState *env, uint32_t td,
                         target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint16_t *tile16 = xsmtamev06_tile16_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
 
-    xsmtamev06_load_tile16_stride(tile16, env, addr, stride,
+    xsmtame_load_tile16_stride(tile16, env, addr, stride,
                                     shape.n, shape.k, false);
 }
 
-void HELPER(xsmtamev06_mlbe32)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_mlbe32)(CPURISCVState *env, uint32_t td,
                         target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint32_t *tile32 = xsmtamev06_tile32_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
 
-    xsmtamev06_load_tile32_stride(tile32, env, addr, stride,
+    xsmtame_load_tile32_stride(tile32, env, addr, stride,
                                     shape.n, shape.k, false);
 }
 
-void HELPER(xsmtamev06_mlate16)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_mlate16)(CPURISCVState *env, uint32_t td,
                          target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint16_t *tile16 = xsmtamev06_tile16_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
 
-    xsmtamev06_load_tile16_stride(tile16, env, addr, stride,
+    xsmtame_load_tile16_stride(tile16, env, addr, stride,
                                     shape.m, shape.k, true);
 }
 
-void HELPER(xsmtamev06_mlate32)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_mlate32)(CPURISCVState *env, uint32_t td,
                          target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint32_t *tile32 = xsmtamev06_tile32_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
 
-    xsmtamev06_load_tile32_stride(tile32, env, addr, stride,
+    xsmtame_load_tile32_stride(tile32, env, addr, stride,
                                     shape.m, shape.k, true);
 }
 
-void HELPER(xsmtamev06_mlbte16)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_mlbte16)(CPURISCVState *env, uint32_t td,
                          target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint16_t *tile16 = xsmtamev06_tile16_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
 
-    xsmtamev06_load_tile16_stride(tile16, env, addr, stride,
+    xsmtame_load_tile16_stride(tile16, env, addr, stride,
                                     shape.n, shape.k, true);
 }
 
-void HELPER(xsmtamev06_mlbte32)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_mlbte32)(CPURISCVState *env, uint32_t td,
                          target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint32_t *tile32 = xsmtamev06_tile32_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
 
-    xsmtamev06_load_tile32_stride(tile32, env, addr, stride,
+    xsmtame_load_tile32_stride(tile32, env, addr, stride,
                                     shape.n, shape.k, true);
 }
 
-void HELPER(xsmtamev06_mlce8)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_mlce8)(CPURISCVState *env, uint32_t ad,
                        target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint8_t *acc8 = xsmtamev06_acc8_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint8_t *acc8 = xsmtame_acc8_ptr(env, ad);
 
-    xsmtamev06_load_acc8_stride(acc8, env, addr, stride,
+    xsmtame_load_acc8_stride(acc8, env, addr, stride,
                                   shape.m, shape.n, false);
 }
 
-void HELPER(xsmtamev06_mlce16)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_mlce16)(CPURISCVState *env, uint32_t ad,
                         target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint16_t *acc16 = xsmtamev06_acc16_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint16_t *acc16 = xsmtame_acc16_ptr(env, ad);
 
-    xsmtamev06_load_acc16_stride(acc16, env, addr, stride,
+    xsmtame_load_acc16_stride(acc16, env, addr, stride,
                                    shape.m, shape.n, false);
 }
 
-void HELPER(xsmtamev06_mlce32)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_mlce32)(CPURISCVState *env, uint32_t ad,
                         target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint32_t *acc32 = xsmtamev06_acc32_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint32_t *acc32 = xsmtame_acc32_ptr(env, ad);
 
-    xsmtamev06_load_acc32_stride(acc32, env, addr, stride,
+    xsmtame_load_acc32_stride(acc32, env, addr, stride,
                                    shape.m, shape.n, false);
 }
 
-void HELPER(xsmtamev06_mlcte8)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_mlcte8)(CPURISCVState *env, uint32_t ad,
                         target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint8_t *acc8 = xsmtamev06_acc8_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint8_t *acc8 = xsmtame_acc8_ptr(env, ad);
 
-    xsmtamev06_load_acc8_stride(acc8, env, addr, stride,
+    xsmtame_load_acc8_stride(acc8, env, addr, stride,
                                   shape.m, shape.n, true);
 }
 
-void HELPER(xsmtamev06_mlcte16)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_mlcte16)(CPURISCVState *env, uint32_t ad,
                          target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint16_t *acc16 = xsmtamev06_acc16_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint16_t *acc16 = xsmtame_acc16_ptr(env, ad);
 
-    xsmtamev06_load_acc16_stride(acc16, env, addr, stride,
+    xsmtame_load_acc16_stride(acc16, env, addr, stride,
                                    shape.m, shape.n, true);
 }
 
-void HELPER(xsmtamev06_mlcte32)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_mlcte32)(CPURISCVState *env, uint32_t ad,
                          target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint32_t *acc32 = xsmtamev06_acc32_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint32_t *acc32 = xsmtame_acc32_ptr(env, ad);
 
-    xsmtamev06_load_acc32_stride(acc32, env, addr, stride,
+    xsmtame_load_acc32_stride(acc32, env, addr, stride,
                                    shape.m, shape.n, true);
 }
 
-void HELPER(xsmtamev06_mlme32)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_mlme32)(CPURISCVState *env, uint32_t ad,
                         target_ulong addr)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint32_t *acc32 = xsmtamev06_acc32_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint32_t *acc32 = xsmtame_acc32_ptr(env, ad);
 
-    xsmtamev06_load_acc32_stride(acc32, env, addr,
+    xsmtame_load_acc32_stride(acc32, env, addr,
                                    shape.n * sizeof(*acc32),
                                    shape.m, shape.n, false);
 }
@@ -671,214 +671,214 @@ void HELPER(xsmtamev06_mlme32)(CPURISCVState *env, uint32_t ad,
  * ──────────────────────────────────────────
  */
 
-void HELPER(xsmtamev06_msae16)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_msae16)(CPURISCVState *env, uint32_t td,
                         target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint16_t *tile16 = xsmtamev06_tile16_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
 
-    xsmtamev06_store_tile16_stride(tile16, env, addr, stride,
+    xsmtame_store_tile16_stride(tile16, env, addr, stride,
                                      shape.m, shape.k, false);
 }
 
-void HELPER(xsmtamev06_msae32)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_msae32)(CPURISCVState *env, uint32_t td,
                         target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint32_t *tile32 = xsmtamev06_tile32_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
 
-    xsmtamev06_store_tile32_stride(tile32, env, addr, stride,
+    xsmtame_store_tile32_stride(tile32, env, addr, stride,
                                      shape.m, shape.k, false);
 }
 
-void HELPER(xsmtamev06_msae8)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_msae8)(CPURISCVState *env, uint32_t td,
                        target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint8_t *tile = xsmtamev06_tile_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint8_t *tile = xsmtame_tile_ptr(env, td);
 
-    xsmtamev06_store_tile8_stride(tile, env, addr, stride,
+    xsmtame_store_tile8_stride(tile, env, addr, stride,
                                     shape.m, shape.k, false);
 }
 
-void HELPER(xsmtamev06_msbe16)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_msbe16)(CPURISCVState *env, uint32_t td,
                         target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint16_t *tile16 = xsmtamev06_tile16_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
 
-    xsmtamev06_store_tile16_stride(tile16, env, addr, stride,
+    xsmtame_store_tile16_stride(tile16, env, addr, stride,
                                      shape.n, shape.k, false);
 }
 
-void HELPER(xsmtamev06_msbe32)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_msbe32)(CPURISCVState *env, uint32_t td,
                         target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint32_t *tile32 = xsmtamev06_tile32_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
 
-    xsmtamev06_store_tile32_stride(tile32, env, addr, stride,
+    xsmtame_store_tile32_stride(tile32, env, addr, stride,
                                      shape.n, shape.k, false);
 }
 
-void HELPER(xsmtamev06_msbe8)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_msbe8)(CPURISCVState *env, uint32_t td,
                        target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint8_t *tile = xsmtamev06_tile_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint8_t *tile = xsmtame_tile_ptr(env, td);
 
-    xsmtamev06_store_tile8_stride(tile, env, addr, stride,
+    xsmtame_store_tile8_stride(tile, env, addr, stride,
                                     shape.n, shape.k, false);
 }
 
-void HELPER(xsmtamev06_msce8)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_msce8)(CPURISCVState *env, uint32_t ad,
                        target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint8_t *acc8 = xsmtamev06_acc8_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint8_t *acc8 = xsmtame_acc8_ptr(env, ad);
 
-    xsmtamev06_store_acc8_stride(acc8, env, addr, stride,
+    xsmtame_store_acc8_stride(acc8, env, addr, stride,
                                    shape.m, shape.n, false);
 }
 
-void HELPER(xsmtamev06_msce16)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_msce16)(CPURISCVState *env, uint32_t ad,
                         target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint16_t *acc16 = xsmtamev06_acc16_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint16_t *acc16 = xsmtame_acc16_ptr(env, ad);
 
-    xsmtamev06_store_acc16_stride(acc16, env, addr, stride,
+    xsmtame_store_acc16_stride(acc16, env, addr, stride,
                                     shape.m, shape.n, false);
 }
 
-void HELPER(xsmtamev06_msce32)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_msce32)(CPURISCVState *env, uint32_t ad,
                         target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint32_t *acc32 = xsmtamev06_acc32_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint32_t *acc32 = xsmtame_acc32_ptr(env, ad);
 
-    xsmtamev06_store_acc32_stride(acc32, env, addr, stride,
+    xsmtame_store_acc32_stride(acc32, env, addr, stride,
                                     shape.m, shape.n, false);
 }
 
-void HELPER(xsmtamev06_msate8)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_msate8)(CPURISCVState *env, uint32_t td,
                        target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint8_t *tile = xsmtamev06_tile_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint8_t *tile = xsmtame_tile_ptr(env, td);
 
-    xsmtamev06_store_tile8_stride(tile, env, addr, stride,
+    xsmtame_store_tile8_stride(tile, env, addr, stride,
                                     shape.m, shape.k, true);
 }
 
-void HELPER(xsmtamev06_msbte8)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_msbte8)(CPURISCVState *env, uint32_t td,
                        target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint8_t *tile = xsmtamev06_tile_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint8_t *tile = xsmtame_tile_ptr(env, td);
 
-    xsmtamev06_store_tile8_stride(tile, env, addr, stride,
+    xsmtame_store_tile8_stride(tile, env, addr, stride,
                                     shape.n, shape.k, true);
 }
 
-void HELPER(xsmtamev06_mscte8)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_mscte8)(CPURISCVState *env, uint32_t ad,
                         target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint8_t *acc8 = xsmtamev06_acc8_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint8_t *acc8 = xsmtame_acc8_ptr(env, ad);
 
-    xsmtamev06_store_acc8_stride(acc8, env, addr, stride,
+    xsmtame_store_acc8_stride(acc8, env, addr, stride,
                                    shape.m, shape.n, true);
 }
 
-void HELPER(xsmtamev06_mscte16)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_mscte16)(CPURISCVState *env, uint32_t ad,
                          target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint16_t *acc16 = xsmtamev06_acc16_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint16_t *acc16 = xsmtame_acc16_ptr(env, ad);
 
-    xsmtamev06_store_acc16_stride(acc16, env, addr, stride,
+    xsmtame_store_acc16_stride(acc16, env, addr, stride,
                                     shape.m, shape.n, true);
 }
 
-void HELPER(xsmtamev06_mscte32)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_mscte32)(CPURISCVState *env, uint32_t ad,
                          target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint32_t *acc32 = xsmtamev06_acc32_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint32_t *acc32 = xsmtame_acc32_ptr(env, ad);
 
-    xsmtamev06_store_acc32_stride(acc32, env, addr, stride,
+    xsmtame_store_acc32_stride(acc32, env, addr, stride,
                                     shape.m, shape.n, true);
 }
 
-void HELPER(xsmtamev06_msate16)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_msate16)(CPURISCVState *env, uint32_t td,
                          target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint16_t *tile16 = xsmtamev06_tile16_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
 
-    xsmtamev06_store_tile16_stride(tile16, env, addr, stride,
+    xsmtame_store_tile16_stride(tile16, env, addr, stride,
                                      shape.m, shape.k, true);
 }
 
-void HELPER(xsmtamev06_msate32)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_msate32)(CPURISCVState *env, uint32_t td,
                          target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint32_t *tile32 = xsmtamev06_tile32_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
 
-    xsmtamev06_store_tile32_stride(tile32, env, addr, stride,
+    xsmtame_store_tile32_stride(tile32, env, addr, stride,
                                      shape.m, shape.k, true);
 }
 
-void HELPER(xsmtamev06_msbte16)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_msbte16)(CPURISCVState *env, uint32_t td,
                          target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint16_t *tile16 = xsmtamev06_tile16_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
 
-    xsmtamev06_store_tile16_stride(tile16, env, addr, stride,
+    xsmtame_store_tile16_stride(tile16, env, addr, stride,
                                      shape.n, shape.k, true);
 }
 
-void HELPER(xsmtamev06_msbte32)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_msbte32)(CPURISCVState *env, uint32_t td,
                          target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint32_t *tile32 = xsmtamev06_tile32_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
 
-    xsmtamev06_store_tile32_stride(tile32, env, addr, stride,
+    xsmtame_store_tile32_stride(tile32, env, addr, stride,
                                      shape.n, shape.k, true);
 }
 
-void HELPER(xsmtamev06_msme8)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_msme8)(CPURISCVState *env, uint32_t td,
                        target_ulong addr, target_ulong stride)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint8_t *tile = xsmtamev06_tile_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint8_t *tile = xsmtame_tile_ptr(env, td);
 
-    xsmtamev06_store_tile8_stride(tile, env, addr, stride,
+    xsmtame_store_tile8_stride(tile, env, addr, stride,
                                     shape.m, shape.k, false);
 }
 
-void HELPER(xsmtamev06_msme16)(CPURISCVState *env, uint32_t td,
+void HELPER(xsmtame_msme16)(CPURISCVState *env, uint32_t td,
                         target_ulong addr)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint16_t *tile16 = xsmtamev06_tile16_ptr(env, td);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
 
-    xsmtamev06_store_tile16_stride(tile16, env, addr,
+    xsmtame_store_tile16_stride(tile16, env, addr,
                                      shape.k * sizeof(*tile16),
                                      shape.m, shape.k, false);
 }
 
-void HELPER(xsmtamev06_msme32)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_msme32)(CPURISCVState *env, uint32_t ad,
                         target_ulong addr)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    uint32_t *acc32 = xsmtamev06_acc32_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    uint32_t *acc32 = xsmtame_acc32_ptr(env, ad);
 
-    xsmtamev06_store_acc32_stride(acc32, env, addr,
+    xsmtame_store_acc32_stride(acc32, env, addr,
                                     shape.n * sizeof(*acc32),
                                     shape.m, shape.n, false);
 }
@@ -898,15 +898,15 @@ void HELPER(xsmtamev06_msme32)(CPURISCVState *env, uint32_t ad,
  *   acc[md][m][n] += Σ_{k} fp32(A[ms1][m][k]) * fp32(B_T[ms2][n][k])
  */
 
-static void xsmtamev06_mmacc_w_b_common(CPURISCVState *env, uint32_t ad,
+static void xsmtame_mmacc_w_b_common(CPURISCVState *env, uint32_t ad,
                                           uint32_t ts2, uint32_t ts1,
                                           bool lhs_unsigned,
                                           bool rhs_unsigned)
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint8_t *tA = (const uint8_t *)xsmtamev06_tile8s_ptr(env, ts2);
-    const uint8_t *tBT = (const uint8_t *)xsmtamev06_tile8s_ptr(env, ts1);
-    int32_t *acc = (int32_t *)xsmtamev06_acc32_ptr(env, ad);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint8_t *tA = (const uint8_t *)xsmtame_tile8s_ptr(env, ts2);
+    const uint8_t *tBT = (const uint8_t *)xsmtame_tile8s_ptr(env, ts1);
+    int32_t *acc = (int32_t *)xsmtame_acc32_ptr(env, ad);
     uint32_t m, n, k;
 
     for (m = 0; m < shape.m; m++) {
@@ -925,55 +925,55 @@ static void xsmtamev06_mmacc_w_b_common(CPURISCVState *env, uint32_t ad,
     }
 }
 
-void HELPER(xsmtamev06_mmaccu_w_b)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_mmaccu_w_b)(CPURISCVState *env, uint32_t ad,
                             uint32_t ts2, uint32_t ts1)
 {
-    xsmtamev06_mmacc_w_b_common(env, ad, ts2, ts1, true, true);
+    xsmtame_mmacc_w_b_common(env, ad, ts2, ts1, true, true);
 }
 
-void HELPER(xsmtamev06_mmaccus_w_b)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_mmaccus_w_b)(CPURISCVState *env, uint32_t ad,
                              uint32_t ts2, uint32_t ts1)
 {
-    xsmtamev06_mmacc_w_b_common(env, ad, ts2, ts1, true, false);
+    xsmtame_mmacc_w_b_common(env, ad, ts2, ts1, true, false);
 }
 
-void HELPER(xsmtamev06_mmaccsu_w_b)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_mmaccsu_w_b)(CPURISCVState *env, uint32_t ad,
                              uint32_t ts2, uint32_t ts1)
 {
-    xsmtamev06_mmacc_w_b_common(env, ad, ts2, ts1, false, true);
+    xsmtame_mmacc_w_b_common(env, ad, ts2, ts1, false, true);
 }
 
-void HELPER(xsmtamev06_mmacc_w_b)(CPURISCVState *env, uint32_t ad,
+void HELPER(xsmtame_mmacc_w_b)(CPURISCVState *env, uint32_t ad,
                            uint32_t ts2, uint32_t ts1)
 {
-    xsmtamev06_mmacc_w_b_common(env, ad, ts2, ts1, false, false);
+    xsmtame_mmacc_w_b_common(env, ad, ts2, ts1, false, false);
 }
 
-static inline float32 xsmtamev06_mfmacc_fp16_to_f32(uint16_t raw,
+static inline float32 xsmtame_mfmacc_fp16_to_f32(uint16_t raw,
                                                        float_status *fpst)
 {
     return float16_to_float32(make_float16(raw), true, fpst);
 }
 
-static inline float32 xsmtamev06_mfmacc_bf16_to_f32(uint16_t raw,
+static inline float32 xsmtame_mfmacc_bf16_to_f32(uint16_t raw,
                                                        float_status *fpst)
 {
     return bfloat16_to_float32((bfloat16)raw, fpst);
 }
 
-static inline uint16_t xsmtamev06_mfmacc_f32_to_f16_bits(float32 raw,
+static inline uint16_t xsmtame_mfmacc_f32_to_f16_bits(float32 raw,
                                                            float_status *fpst)
 {
     return float16_val(float32_to_float16(raw, true, fpst));
 }
 
-static inline uint16_t xsmtamev06_mfmacc_f32_to_bf16_bits(float32 raw,
+static inline uint16_t xsmtame_mfmacc_f32_to_bf16_bits(float32 raw,
                                                             float_status *fpst)
 {
     return (uint16_t)float32_to_bfloat16(raw, fpst);
 }
 
-static inline float32 xsmtamev06_mfmacc_fp8_to_f32(uint8_t raw,
+static inline float32 xsmtame_mfmacc_fp8_to_f32(uint8_t raw,
                                                      uint8_t exp_bits,
                                                      uint8_t frac_bits,
                                                      int16_t exp_bias,
@@ -1009,16 +1009,16 @@ static inline float32 xsmtamev06_mfmacc_fp8_to_f32(uint8_t raw,
                                   unbiased_exp - frac_bits, fpst);
 }
 
-static inline float32 xsmtamev06_mfmacc_e4_to_f32(uint8_t raw,
+static inline float32 xsmtame_mfmacc_e4_to_f32(uint8_t raw,
                                                      float_status *fpst)
 {
-    return xsmtamev06_mfmacc_fp8_to_f32(raw, 4, 3, 7, fpst);
+    return xsmtame_mfmacc_fp8_to_f32(raw, 4, 3, 7, fpst);
 }
 
-static inline float32 xsmtamev06_mfmacc_e5_to_f32(uint8_t raw,
+static inline float32 xsmtame_mfmacc_e5_to_f32(uint8_t raw,
                                                      float_status *fpst)
 {
-    return xsmtamev06_mfmacc_fp8_to_f32(raw, 5, 2, 15, fpst);
+    return xsmtame_mfmacc_fp8_to_f32(raw, 5, 2, 15, fpst);
 }
 
 typedef struct AMEMfmaccInternal30 {
@@ -1035,7 +1035,7 @@ typedef struct AMEMfmaccDecodedFloat {
     bool is_zero;
 } AMEMfmaccDecodedFloat;
 
-static inline uint32_t xsmtamev06_mfmacc_shrjam32(uint32_t a, uint8_t dist)
+static inline uint32_t xsmtame_mfmacc_shrjam32(uint32_t a, uint8_t dist)
 {
     if (!dist) {
         return a;
@@ -1046,7 +1046,7 @@ static inline uint32_t xsmtamev06_mfmacc_shrjam32(uint32_t a, uint8_t dist)
     return a ? 1 : 0;
 }
 
-static inline uint64_t xsmtamev06_mfmacc_shrjam64(uint64_t a, uint8_t dist)
+static inline uint64_t xsmtame_mfmacc_shrjam64(uint64_t a, uint8_t dist)
 {
     if (!dist) {
         return a;
@@ -1057,7 +1057,7 @@ static inline uint64_t xsmtamev06_mfmacc_shrjam64(uint64_t a, uint8_t dist)
     return a ? 1 : 0;
 }
 
-static inline uint32_t xsmtamev06_mfmacc_round_to_odd32(uint32_t a,
+static inline uint32_t xsmtame_mfmacc_round_to_odd32(uint32_t a,
                                                            uint8_t dist)
 {
     uint32_t z;
@@ -1065,14 +1065,14 @@ static inline uint32_t xsmtamev06_mfmacc_round_to_odd32(uint32_t a,
     if (!dist) {
         return a;
     }
-    z = xsmtamev06_mfmacc_shrjam32(a, dist);
+    z = xsmtame_mfmacc_shrjam32(a, dist);
     if (z && (a & ((((uint32_t)1) << (dist < 32 ? dist : 31)) - 1))) {
         z |= 1;
     }
     return z;
 }
 
-static bool xsmtamev06_mfmacc_decode_float(uint16_t ui,
+static bool xsmtame_mfmacc_decode_float(uint16_t ui,
                                              uint8_t exp_bits,
                                              uint8_t frac_bits,
                                              int16_t exp_bias,
@@ -1112,7 +1112,7 @@ static bool xsmtamev06_mfmacc_decode_float(uint16_t ui,
     return true;
 }
 
-static bool xsmtamev06_mfmacc_mul_float_to_internal30(uint16_t ui_a,
+static bool xsmtame_mfmacc_mul_float_to_internal30(uint16_t ui_a,
                                                         uint8_t exp_bits_a,
                                                         uint8_t frac_bits_a,
                                                         int16_t exp_bias_a,
@@ -1127,9 +1127,9 @@ static bool xsmtamev06_mfmacc_mul_float_to_internal30(uint16_t ui_a,
     uint64_t sig_prod;
     uint8_t frac_bits_prod;
 
-    if (!xsmtamev06_mfmacc_decode_float(ui_a, exp_bits_a, frac_bits_a,
+    if (!xsmtame_mfmacc_decode_float(ui_a, exp_bits_a, frac_bits_a,
                                           exp_bias_a, &a) ||
-        !xsmtamev06_mfmacc_decode_float(ui_b, exp_bits_b, frac_bits_b,
+        !xsmtame_mfmacc_decode_float(ui_b, exp_bits_b, frac_bits_b,
                                           exp_bias_b, &b)) {
         return false;
     }
@@ -1150,13 +1150,13 @@ static bool xsmtamev06_mfmacc_mul_float_to_internal30(uint16_t ui_a,
 
     if (sig_prod & (((uint64_t)1) << (frac_bits_prod + 1))) {
         ++out->exp;
-        sig_prod = xsmtamev06_mfmacc_shrjam64(sig_prod, 1);
+        sig_prod = xsmtame_mfmacc_shrjam64(sig_prod, 1);
     }
 
     if (frac_bits_prod < 26) {
         sig_prod <<= (26 - frac_bits_prod);
     } else if (frac_bits_prod > 26) {
-        sig_prod = xsmtamev06_mfmacc_shrjam64(sig_prod,
+        sig_prod = xsmtame_mfmacc_shrjam64(sig_prod,
                                                 frac_bits_prod - 26);
     }
 
@@ -1164,43 +1164,43 @@ static bool xsmtamev06_mfmacc_mul_float_to_internal30(uint16_t ui_a,
     return true;
 }
 
-static inline bool xsmtamev06_mfmacc_mul_f16_to_internal30(uint16_t ui_a,
+static inline bool xsmtame_mfmacc_mul_f16_to_internal30(uint16_t ui_a,
                                                               uint16_t ui_b,
                                                               AMEMfmaccInternal30 *out)
 {
-    return xsmtamev06_mfmacc_mul_float_to_internal30(ui_a, 5, 10, 15,
+    return xsmtame_mfmacc_mul_float_to_internal30(ui_a, 5, 10, 15,
                                                        ui_b, 5, 10, 15,
                                                        out);
 }
 
-static inline bool xsmtamev06_mfmacc_mul_bf16_to_internal30(uint16_t ui_a,
+static inline bool xsmtame_mfmacc_mul_bf16_to_internal30(uint16_t ui_a,
                                                                uint16_t ui_b,
                                                                AMEMfmaccInternal30 *out)
 {
-    return xsmtamev06_mfmacc_mul_float_to_internal30(ui_a, 8, 7, 127,
+    return xsmtame_mfmacc_mul_float_to_internal30(ui_a, 8, 7, 127,
                                                        ui_b, 8, 7, 127,
                                                        out);
 }
 
-static inline bool xsmtamev06_mfmacc_mul_e4_to_internal30(uint8_t ui_a,
+static inline bool xsmtame_mfmacc_mul_e4_to_internal30(uint8_t ui_a,
                                                              uint8_t ui_b,
                                                              AMEMfmaccInternal30 *out)
 {
-    return xsmtamev06_mfmacc_mul_float_to_internal30(ui_a, 4, 3, 7,
+    return xsmtame_mfmacc_mul_float_to_internal30(ui_a, 4, 3, 7,
                                                        ui_b, 4, 3, 7,
                                                        out);
 }
 
-static inline bool xsmtamev06_mfmacc_mul_e5_to_internal30(uint8_t ui_a,
+static inline bool xsmtame_mfmacc_mul_e5_to_internal30(uint8_t ui_a,
                                                              uint8_t ui_b,
                                                              AMEMfmaccInternal30 *out)
 {
-    return xsmtamev06_mfmacc_mul_float_to_internal30(ui_a, 5, 2, 15,
+    return xsmtame_mfmacc_mul_float_to_internal30(ui_a, 5, 2, 15,
                                                        ui_b, 5, 2, 15,
                                                        out);
 }
 
-static void xsmtamev06_mfmacc_pack_normalized_internal30(bool sign,
+static void xsmtame_mfmacc_pack_normalized_internal30(bool sign,
                                                            int16_t exp,
                                                            uint64_t sig,
                                                            AMEMfmaccInternal30 *out)
@@ -1215,7 +1215,7 @@ static void xsmtamev06_mfmacc_pack_normalized_internal30(bool sign,
     }
 
     while (sig >= UINT64_C(0x8000000)) {
-        sig = xsmtamev06_mfmacc_shrjam64(sig, 1);
+        sig = xsmtame_mfmacc_shrjam64(sig, 1);
         ++exp;
     }
     while (sig < UINT64_C(0x4000000)) {
@@ -1229,7 +1229,7 @@ static void xsmtamev06_mfmacc_pack_normalized_internal30(bool sign,
     out->is_zero = false;
 }
 
-static void xsmtamev06_mfmacc_add_internal30_unified(const AMEMfmaccInternal30 *terms,
+static void xsmtame_mfmacc_add_internal30_unified(const AMEMfmaccInternal30 *terms,
                                                         uint8_t term_count,
                                                         AMEMfmaccInternal30 *out)
 {
@@ -1264,24 +1264,24 @@ static void xsmtamev06_mfmacc_add_internal30_unified(const AMEMfmaccInternal30 *
         }
         aligned_sig = terms[k].sig;
         if (terms[k].exp < exp_z) {
-            aligned_sig = xsmtamev06_mfmacc_round_to_odd32(aligned_sig,
+            aligned_sig = xsmtame_mfmacc_round_to_odd32(aligned_sig,
                                 (uint8_t)(exp_z - terms[k].exp));
         }
         sig_sum += terms[k].sign ? -(int64_t)aligned_sig : (int64_t)aligned_sig;
     }
 
     if (sig_sum < 0) {
-        xsmtamev06_mfmacc_pack_normalized_internal30(true, exp_z,
+        xsmtame_mfmacc_pack_normalized_internal30(true, exp_z,
                                                        (uint64_t)(-sig_sum),
                                                        out);
     } else {
-        xsmtamev06_mfmacc_pack_normalized_internal30(false, exp_z,
+        xsmtame_mfmacc_pack_normalized_internal30(false, exp_z,
                                                        (uint64_t)sig_sum,
                                                        out);
     }
 }
 
-static float32 xsmtamev06_mfmacc_internal30_to_f32(const AMEMfmaccInternal30 *a,
+static float32 xsmtame_mfmacc_internal30_to_f32(const AMEMfmaccInternal30 *a,
                                                      float_status *fpst)
 {
     uint32_t ui_z;
@@ -1304,12 +1304,12 @@ static float32 xsmtamev06_mfmacc_internal30_to_f32(const AMEMfmaccInternal30 *a,
         return make_float32(ui_z);
     }
 
-    frac = xsmtamev06_mfmacc_round_to_odd32(a->sig, 3) & 0x007fffff;
+    frac = xsmtame_mfmacc_round_to_odd32(a->sig, 3) & 0x007fffff;
     ui_z = (((uint32_t)a->sign) << 31) | ((uint32_t)exp << 23) | frac;
     return make_float32(ui_z);
 }
 
-static float32 xsmtamev06_mfmacc_reference_dot16(const uint16_t *lhs,
+static float32 xsmtame_mfmacc_reference_dot16(const uint16_t *lhs,
                                                    const uint16_t *rhs,
                                                    uint8_t k_cols,
                                                    float32 c,
@@ -1326,7 +1326,7 @@ static float32 xsmtamev06_mfmacc_reference_dot16(const uint16_t *lhs,
     return c;
 }
 
-static float32 xsmtamev06_mfmacc_reference_dot8(const uint8_t *lhs,
+static float32 xsmtame_mfmacc_reference_dot8(const uint8_t *lhs,
                                                   const uint8_t *rhs,
                                                   uint8_t k_cols,
                                                   float32 c,
@@ -1343,7 +1343,7 @@ static float32 xsmtamev06_mfmacc_reference_dot8(const uint8_t *lhs,
     return c;
 }
 
-static float32 xsmtamev06_mfmacc_cell16_internal30(const uint16_t *lhs,
+static float32 xsmtame_mfmacc_cell16_internal30(const uint16_t *lhs,
                                                      const uint16_t *rhs,
                                                      uint8_t k_cols,
                                                      float32 c,
@@ -1364,23 +1364,23 @@ static float32 xsmtamev06_mfmacc_cell16_internal30(const uint16_t *lhs,
     acc_int.is_zero = true;
 
     if (k_cols > 4) {
-        return xsmtamev06_mfmacc_reference_dot16(lhs, rhs, k_cols, c,
+        return xsmtame_mfmacc_reference_dot16(lhs, rhs, k_cols, c,
                                                    fallback_convert, fpst);
     }
 
     for (k = 0; k < k_cols; ++k) {
         if (!mul_to_internal(lhs[k], rhs[k], &prod_list[k])) {
-            return xsmtamev06_mfmacc_reference_dot16(lhs, rhs, k_cols, c,
+            return xsmtame_mfmacc_reference_dot16(lhs, rhs, k_cols, c,
                                                        fallback_convert, fpst);
         }
     }
 
-    xsmtamev06_mfmacc_add_internal30_unified(prod_list, k_cols, &acc_int);
-    return float32_add(xsmtamev06_mfmacc_internal30_to_f32(&acc_int, fpst),
+    xsmtame_mfmacc_add_internal30_unified(prod_list, k_cols, &acc_int);
+    return float32_add(xsmtame_mfmacc_internal30_to_f32(&acc_int, fpst),
                        c, fpst);
 }
 
-static float32 xsmtamev06_mfmacc_cell8_internal30(const uint8_t *lhs,
+static float32 xsmtame_mfmacc_cell8_internal30(const uint8_t *lhs,
                                                     const uint8_t *rhs,
                                                     uint8_t k_cols,
                                                     float32 c,
@@ -1401,23 +1401,23 @@ static float32 xsmtamev06_mfmacc_cell8_internal30(const uint8_t *lhs,
     acc_int.is_zero = true;
 
     if (k_cols > 4) {
-        return xsmtamev06_mfmacc_reference_dot8(lhs, rhs, k_cols, c,
+        return xsmtame_mfmacc_reference_dot8(lhs, rhs, k_cols, c,
                                                   fallback_convert, fpst);
     }
 
     for (k = 0; k < k_cols; ++k) {
         if (!mul_to_internal(lhs[k], rhs[k], &prod_list[k])) {
-            return xsmtamev06_mfmacc_reference_dot8(lhs, rhs, k_cols, c,
+            return xsmtame_mfmacc_reference_dot8(lhs, rhs, k_cols, c,
                                                       fallback_convert, fpst);
         }
     }
 
-    xsmtamev06_mfmacc_add_internal30_unified(prod_list, k_cols, &acc_int);
-    return float32_add(xsmtamev06_mfmacc_internal30_to_f32(&acc_int, fpst),
+    xsmtame_mfmacc_add_internal30_unified(prod_list, k_cols, &acc_int);
+    return float32_add(xsmtame_mfmacc_internal30_to_f32(&acc_int, fpst),
                        c, fpst);
 }
 
-static void xsmtamev06_mfmacc16_common(CPURISCVState *env, uint32_t md,
+static void xsmtame_mfmacc16_common(CPURISCVState *env, uint32_t md,
                                          uint32_t ms2, uint32_t ms1,
                                          bool (*mul_to_internal)(uint16_t,
                                                                  uint16_t,
@@ -1425,17 +1425,17 @@ static void xsmtamev06_mfmacc16_common(CPURISCVState *env, uint32_t md,
                                          float32 (*fallback_convert)(uint16_t,
                                                                      float_status *))
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint16_t *tA = xsmtamev06_tile16_ptr(env, ms1);
-    const uint16_t *tBT = xsmtamev06_tile16_ptr(env, ms2);
-    uint32_t *acc = xsmtamev06_acc32_ptr(env, md);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint16_t *tA = xsmtame_tile16_ptr(env, ms1);
+    const uint16_t *tBT = xsmtame_tile16_ptr(env, ms2);
+    uint32_t *acc = xsmtame_acc32_ptr(env, md);
     float_status *fpst = &env->fp_status;
     uint32_t m, n;
 
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
             float32 c = make_float32(acc[m * shape.n + n]);
-            c = xsmtamev06_mfmacc_cell16_internal30(&tA[m * shape.k],
+            c = xsmtame_mfmacc_cell16_internal30(&tA[m * shape.k],
                                                       &tBT[n * shape.k],
                                                       shape.k,
                                                       c,
@@ -1447,7 +1447,7 @@ static void xsmtamev06_mfmacc16_common(CPURISCVState *env, uint32_t md,
     }
 }
 
-static void xsmtamev06_mfmacc8_common(CPURISCVState *env, uint32_t md,
+static void xsmtame_mfmacc8_common(CPURISCVState *env, uint32_t md,
                                         uint32_t ms2, uint32_t ms1,
                                         bool (*mul_to_internal)(uint8_t,
                                                                 uint8_t,
@@ -1455,17 +1455,17 @@ static void xsmtamev06_mfmacc8_common(CPURISCVState *env, uint32_t md,
                                         float32 (*fallback_convert)(uint8_t,
                                                                     float_status *))
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint8_t *tA = (const uint8_t *)xsmtamev06_tile_ptr(env, ms1);
-    const uint8_t *tBT = (const uint8_t *)xsmtamev06_tile_ptr(env, ms2);
-    uint32_t *acc = xsmtamev06_acc32_ptr(env, md);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint8_t *tA = (const uint8_t *)xsmtame_tile_ptr(env, ms1);
+    const uint8_t *tBT = (const uint8_t *)xsmtame_tile_ptr(env, ms2);
+    uint32_t *acc = xsmtame_acc32_ptr(env, md);
     float_status *fpst = &env->fp_status;
     uint32_t m, n;
 
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
             float32 c = make_float32(acc[m * shape.n + n]);
-            c = xsmtamev06_mfmacc_cell8_internal30(&tA[m * shape.k],
+            c = xsmtame_mfmacc_cell8_internal30(&tA[m * shape.k],
                                                      &tBT[n * shape.k],
                                                      shape.k,
                                                      c,
@@ -1477,7 +1477,7 @@ static void xsmtamev06_mfmacc8_common(CPURISCVState *env, uint32_t md,
     }
 }
 
-static void xsmtamev06_mfmacc16_acc16_common(CPURISCVState *env, uint32_t md,
+static void xsmtame_mfmacc16_acc16_common(CPURISCVState *env, uint32_t md,
                                                uint32_t ms2, uint32_t ms1,
                                                bool (*mul_to_internal)(uint16_t,
                                                                        uint16_t,
@@ -1487,29 +1487,29 @@ static void xsmtamev06_mfmacc16_acc16_common(CPURISCVState *env, uint32_t md,
                                                uint16_t (*f32_to_acc)(float32,
                                                                       float_status *))
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint16_t *tA = xsmtamev06_tile16_ptr(env, ms1);
-    const uint16_t *tBT = xsmtamev06_tile16_ptr(env, ms2);
-    uint16_t *acc = xsmtamev06_acc16_ptr(env, md);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint16_t *tA = xsmtame_tile16_ptr(env, ms1);
+    const uint16_t *tBT = xsmtame_tile16_ptr(env, ms2);
+    uint16_t *acc = xsmtame_acc16_ptr(env, md);
     float_status *fpst = &env->fp_status;
     uint32_t m, n;
 
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
             float32 c = acc_to_f32(acc[m * shape.n + n], fpst);
-            c = xsmtamev06_mfmacc_cell16_internal30(&tA[m * shape.k],
+            c = xsmtame_mfmacc_cell16_internal30(&tA[m * shape.k],
                                                       &tBT[n * shape.k],
                                                       shape.k,
                                                       c,
                                                       mul_to_internal,
-                                                      xsmtamev06_mfmacc_fp16_to_f32,
+                                                      xsmtame_mfmacc_fp16_to_f32,
                                                       fpst);
             acc[m * shape.n + n] = f32_to_acc(c, fpst);
         }
     }
 }
 
-static void xsmtamev06_mfmacc8_acc16_common(CPURISCVState *env, uint32_t md,
+static void xsmtame_mfmacc8_acc16_common(CPURISCVState *env, uint32_t md,
                                               uint32_t ms2, uint32_t ms1,
                                               bool (*mul_to_internal)(uint8_t,
                                                                       uint8_t,
@@ -1521,17 +1521,17 @@ static void xsmtamev06_mfmacc8_acc16_common(CPURISCVState *env, uint32_t md,
                                               float32 (*fallback_convert)(uint8_t,
                                                                           float_status *))
 {
-    AMEShapeInfo shape = xsmtamev06_shape(env);
-    const uint8_t *tA = (const uint8_t *)xsmtamev06_tile_ptr(env, ms1);
-    const uint8_t *tBT = (const uint8_t *)xsmtamev06_tile_ptr(env, ms2);
-    uint16_t *acc = xsmtamev06_acc16_ptr(env, md);
+    AMEShapeInfo shape = xsmtame_shape(env);
+    const uint8_t *tA = (const uint8_t *)xsmtame_tile_ptr(env, ms1);
+    const uint8_t *tBT = (const uint8_t *)xsmtame_tile_ptr(env, ms2);
+    uint16_t *acc = xsmtame_acc16_ptr(env, md);
     float_status *fpst = &env->fp_status;
     uint32_t m, n;
 
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
             float32 c = acc_to_f32(acc[m * shape.n + n], fpst);
-            c = xsmtamev06_mfmacc_cell8_internal30(&tA[m * shape.k],
+            c = xsmtame_mfmacc_cell8_internal30(&tA[m * shape.k],
                                                      &tBT[n * shape.k],
                                                      shape.k,
                                                      c,
@@ -1543,85 +1543,85 @@ static void xsmtamev06_mfmacc8_acc16_common(CPURISCVState *env, uint32_t md,
     }
 }
 
-void HELPER(xsmtamev06_mfmacc_h_e5)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mfmacc_h_e5)(CPURISCVState *env, uint32_t md,
                              uint32_t ms2, uint32_t ms1)
 {
-    xsmtamev06_mfmacc8_acc16_common(env, md, ms2, ms1,
-                                      xsmtamev06_mfmacc_mul_e5_to_internal30,
-                                      xsmtamev06_mfmacc_fp16_to_f32,
-                                      xsmtamev06_mfmacc_f32_to_f16_bits,
-                                      xsmtamev06_mfmacc_e5_to_f32);
+    xsmtame_mfmacc8_acc16_common(env, md, ms2, ms1,
+                                      xsmtame_mfmacc_mul_e5_to_internal30,
+                                      xsmtame_mfmacc_fp16_to_f32,
+                                      xsmtame_mfmacc_f32_to_f16_bits,
+                                      xsmtame_mfmacc_e5_to_f32);
 }
 
-void HELPER(xsmtamev06_mfmacc_h_e4)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mfmacc_h_e4)(CPURISCVState *env, uint32_t md,
                              uint32_t ms2, uint32_t ms1)
 {
-    xsmtamev06_mfmacc8_acc16_common(env, md, ms2, ms1,
-                                      xsmtamev06_mfmacc_mul_e4_to_internal30,
-                                      xsmtamev06_mfmacc_fp16_to_f32,
-                                      xsmtamev06_mfmacc_f32_to_f16_bits,
-                                      xsmtamev06_mfmacc_e4_to_f32);
+    xsmtame_mfmacc8_acc16_common(env, md, ms2, ms1,
+                                      xsmtame_mfmacc_mul_e4_to_internal30,
+                                      xsmtame_mfmacc_fp16_to_f32,
+                                      xsmtame_mfmacc_f32_to_f16_bits,
+                                      xsmtame_mfmacc_e4_to_f32);
 }
 
-void HELPER(xsmtamev06_mfmacc_bf16_e5)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mfmacc_bf16_e5)(CPURISCVState *env, uint32_t md,
                                 uint32_t ms2, uint32_t ms1)
 {
-    xsmtamev06_mfmacc8_acc16_common(env, md, ms2, ms1,
-                                      xsmtamev06_mfmacc_mul_e5_to_internal30,
-                                      xsmtamev06_mfmacc_bf16_to_f32,
-                                      xsmtamev06_mfmacc_f32_to_bf16_bits,
-                                      xsmtamev06_mfmacc_e5_to_f32);
+    xsmtame_mfmacc8_acc16_common(env, md, ms2, ms1,
+                                      xsmtame_mfmacc_mul_e5_to_internal30,
+                                      xsmtame_mfmacc_bf16_to_f32,
+                                      xsmtame_mfmacc_f32_to_bf16_bits,
+                                      xsmtame_mfmacc_e5_to_f32);
 }
 
-void HELPER(xsmtamev06_mfmacc_bf16_e4)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mfmacc_bf16_e4)(CPURISCVState *env, uint32_t md,
                                 uint32_t ms2, uint32_t ms1)
 {
-    xsmtamev06_mfmacc8_acc16_common(env, md, ms2, ms1,
-                                      xsmtamev06_mfmacc_mul_e4_to_internal30,
-                                      xsmtamev06_mfmacc_bf16_to_f32,
-                                      xsmtamev06_mfmacc_f32_to_bf16_bits,
-                                      xsmtamev06_mfmacc_e4_to_f32);
+    xsmtame_mfmacc8_acc16_common(env, md, ms2, ms1,
+                                      xsmtame_mfmacc_mul_e4_to_internal30,
+                                      xsmtame_mfmacc_bf16_to_f32,
+                                      xsmtame_mfmacc_f32_to_bf16_bits,
+                                      xsmtame_mfmacc_e4_to_f32);
 }
 
-void HELPER(xsmtamev06_mfmacc_h)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mfmacc_h)(CPURISCVState *env, uint32_t md,
                           uint32_t ms2, uint32_t ms1)
 {
-    xsmtamev06_mfmacc16_acc16_common(env, md, ms2, ms1,
-                                       xsmtamev06_mfmacc_mul_f16_to_internal30,
-                                       xsmtamev06_mfmacc_fp16_to_f32,
-                                       xsmtamev06_mfmacc_f32_to_f16_bits);
+    xsmtame_mfmacc16_acc16_common(env, md, ms2, ms1,
+                                       xsmtame_mfmacc_mul_f16_to_internal30,
+                                       xsmtame_mfmacc_fp16_to_f32,
+                                       xsmtame_mfmacc_f32_to_f16_bits);
 }
 
-void HELPER(xsmtamev06_mfmacc_s_e5)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mfmacc_s_e5)(CPURISCVState *env, uint32_t md,
                              uint32_t ms2, uint32_t ms1)
 {
-    xsmtamev06_mfmacc8_common(env, md, ms2, ms1,
-                                xsmtamev06_mfmacc_mul_e5_to_internal30,
-                                xsmtamev06_mfmacc_e5_to_f32);
+    xsmtame_mfmacc8_common(env, md, ms2, ms1,
+                                xsmtame_mfmacc_mul_e5_to_internal30,
+                                xsmtame_mfmacc_e5_to_f32);
 }
 
-void HELPER(xsmtamev06_mfmacc_s_e4)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mfmacc_s_e4)(CPURISCVState *env, uint32_t md,
                              uint32_t ms2, uint32_t ms1)
 {
-    xsmtamev06_mfmacc8_common(env, md, ms2, ms1,
-                                xsmtamev06_mfmacc_mul_e4_to_internal30,
-                                xsmtamev06_mfmacc_e4_to_f32);
+    xsmtame_mfmacc8_common(env, md, ms2, ms1,
+                                xsmtame_mfmacc_mul_e4_to_internal30,
+                                xsmtame_mfmacc_e4_to_f32);
 }
 
-void HELPER(xsmtamev06_mfmacc_s_h)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mfmacc_s_h)(CPURISCVState *env, uint32_t md,
                             uint32_t ms2, uint32_t ms1)
 {
-    xsmtamev06_mfmacc16_common(env, md, ms2, ms1,
-                                 xsmtamev06_mfmacc_mul_f16_to_internal30,
-                                 xsmtamev06_mfmacc_fp16_to_f32);
+    xsmtame_mfmacc16_common(env, md, ms2, ms1,
+                                 xsmtame_mfmacc_mul_f16_to_internal30,
+                                 xsmtame_mfmacc_fp16_to_f32);
 }
 
-void HELPER(xsmtamev06_mfmacc_s_bf16)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mfmacc_s_bf16)(CPURISCVState *env, uint32_t md,
                                uint32_t ms2, uint32_t ms1)
 {
-    xsmtamev06_mfmacc16_common(env, md, ms2, ms1,
-                                 xsmtamev06_mfmacc_mul_bf16_to_internal30,
-                                 xsmtamev06_mfmacc_bf16_to_f32);
+    xsmtame_mfmacc16_common(env, md, ms2, ms1,
+                                 xsmtame_mfmacc_mul_bf16_to_internal30,
+                                 xsmtame_mfmacc_bf16_to_f32);
 }
 /*
  * ──────────────────────────────────────────
@@ -1629,13 +1629,13 @@ void HELPER(xsmtamev06_mfmacc_s_bf16)(CPURISCVState *env, uint32_t md,
  * ──────────────────────────────────────────
  */
 
-void HELPER(xsmtamev06_mmov_mm)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mmov_mm)(CPURISCVState *env, uint32_t md,
                                   uint32_t ms1)
 {
     size_t dst_size;
     size_t src_size;
-    uint8_t *dst = xsmtamev06_matrix_ptr(env, md, &dst_size);
-    uint8_t *src = xsmtamev06_matrix_ptr(env, ms1, &src_size);
+    uint8_t *dst = xsmtame_matrix_ptr(env, md, &dst_size);
+    uint8_t *src = xsmtame_matrix_ptr(env, ms1, &src_size);
     size_t copy_size = MIN(dst_size, src_size);
 
     if (dst == src) {
@@ -1645,84 +1645,84 @@ void HELPER(xsmtamev06_mmov_mm)(CPURISCVState *env, uint32_t md,
     memmove(dst, src, copy_size);
 }
 
-target_ulong HELPER(xsmtamev06_mmovb_x_m)(CPURISCVState *env, uint32_t ms2,
+target_ulong HELPER(xsmtame_mmovb_x_m)(CPURISCVState *env, uint32_t ms2,
                                             target_ulong idx)
 {
     size_t reg_size;
-    uint8_t *src = xsmtamev06_matrix_ptr(env, ms2, &reg_size);
-    size_t offset = xsmtamev06_mmov_elem_offset(reg_size, 1, idx);
+    uint8_t *src = xsmtame_matrix_ptr(env, ms2, &reg_size);
+    size_t offset = xsmtame_mmov_elem_offset(reg_size, 1, idx);
 
     return src[offset];
 }
 
-target_ulong HELPER(xsmtamev06_mmovh_x_m)(CPURISCVState *env, uint32_t ms2,
+target_ulong HELPER(xsmtame_mmovh_x_m)(CPURISCVState *env, uint32_t ms2,
                                             target_ulong idx)
 {
     size_t reg_size;
-    uint8_t *src = xsmtamev06_matrix_ptr(env, ms2, &reg_size);
-    size_t offset = xsmtamev06_mmov_elem_offset(reg_size, 2, idx);
+    uint8_t *src = xsmtame_matrix_ptr(env, ms2, &reg_size);
+    size_t offset = xsmtame_mmov_elem_offset(reg_size, 2, idx);
 
     return lduw_le_p(src + offset);
 }
 
-target_ulong HELPER(xsmtamev06_mmovw_x_m)(CPURISCVState *env, uint32_t ms2,
+target_ulong HELPER(xsmtame_mmovw_x_m)(CPURISCVState *env, uint32_t ms2,
                                             target_ulong idx)
 {
     size_t reg_size;
-    uint8_t *src = xsmtamev06_matrix_ptr(env, ms2, &reg_size);
-    size_t offset = xsmtamev06_mmov_elem_offset(reg_size, 4, idx);
+    uint8_t *src = xsmtame_matrix_ptr(env, ms2, &reg_size);
+    size_t offset = xsmtame_mmov_elem_offset(reg_size, 4, idx);
 
     return ldl_le_p(src + offset);
 }
 
-target_ulong HELPER(xsmtamev06_mmovd_x_m)(CPURISCVState *env, uint32_t ms2,
+target_ulong HELPER(xsmtame_mmovd_x_m)(CPURISCVState *env, uint32_t ms2,
                                             target_ulong idx)
 {
     size_t reg_size;
-    uint8_t *src = xsmtamev06_matrix_ptr(env, ms2, &reg_size);
-    size_t offset = xsmtamev06_mmov_elem_offset(reg_size, 8, idx);
+    uint8_t *src = xsmtame_matrix_ptr(env, ms2, &reg_size);
+    size_t offset = xsmtame_mmov_elem_offset(reg_size, 8, idx);
 
     return ldq_le_p(src + offset);
 }
 
-void HELPER(xsmtamev06_mmovb_m_x)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mmovb_m_x)(CPURISCVState *env, uint32_t md,
                                     target_ulong idx,
                                     target_ulong value)
 {
-    xsmtamev06_mmov_m_x_common(env, md, idx, value, 1);
+    xsmtame_mmov_m_x_common(env, md, idx, value, 1);
 }
 
-void HELPER(xsmtamev06_mmovh_m_x)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mmovh_m_x)(CPURISCVState *env, uint32_t md,
                                     target_ulong idx,
                                     target_ulong value)
 {
-    xsmtamev06_mmov_m_x_common(env, md, idx, value, 2);
+    xsmtame_mmov_m_x_common(env, md, idx, value, 2);
 }
 
-void HELPER(xsmtamev06_mmovw_m_x)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mmovw_m_x)(CPURISCVState *env, uint32_t md,
                                     target_ulong idx,
                                     target_ulong value)
 {
-    xsmtamev06_mmov_m_x_common(env, md, idx, value, 4);
+    xsmtame_mmov_m_x_common(env, md, idx, value, 4);
 }
 
-void HELPER(xsmtamev06_mmovd_m_x)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mmovd_m_x)(CPURISCVState *env, uint32_t md,
                                     target_ulong idx,
                                     target_ulong value)
 {
-    xsmtamev06_mmov_m_x_common(env, md, idx, value, 8);
+    xsmtame_mmov_m_x_common(env, md, idx, value, 8);
 }
 
-static void xsmtamev06_mpack_common(CPURISCVState *env, uint32_t md,
+static void xsmtame_mpack_common(CPURISCVState *env, uint32_t md,
                                       uint32_t ms2, uint32_t ms1,
                                       bool high1, bool high2)
 {
     size_t reg_size;
     uint8_t tmp[AME_ACC_LEN_B];
-    uint8_t *dst = xsmtamev06_matrix_ptr(env, md, &reg_size);
-    uint8_t *src2 = xsmtamev06_matrix_ptr(env, ms2, NULL);
-    uint8_t *src1 = xsmtamev06_matrix_ptr(env, ms1, NULL);
-    size_t row_bytes = xsmtamev06_matrix_row_bytes(env, md);
+    uint8_t *dst = xsmtame_matrix_ptr(env, md, &reg_size);
+    uint8_t *src2 = xsmtame_matrix_ptr(env, ms2, NULL);
+    uint8_t *src1 = xsmtame_matrix_ptr(env, ms1, NULL);
+    size_t row_bytes = xsmtame_matrix_row_bytes(env, md);
     size_t half = row_bytes / 2;
     size_t rows = reg_size / row_bytes;
     size_t row;
@@ -1743,15 +1743,15 @@ static void xsmtamev06_mpack_common(CPURISCVState *env, uint32_t md,
     memcpy(dst, tmp, reg_size);
 }
 
-static void xsmtamev06_mrslide_common(CPURISCVState *env, uint32_t md,
+static void xsmtame_mrslide_common(CPURISCVState *env, uint32_t md,
                                         uint32_t ms1, uint32_t amount,
                                         bool up)
 {
     size_t reg_size;
     uint8_t tmp[AME_ACC_LEN_B];
-    uint8_t *dst = xsmtamev06_matrix_ptr(env, md, &reg_size);
-    uint8_t *src = xsmtamev06_matrix_ptr(env, ms1, NULL);
-    size_t row_bytes = xsmtamev06_matrix_row_bytes(env, md);
+    uint8_t *dst = xsmtame_matrix_ptr(env, md, &reg_size);
+    uint8_t *src = xsmtame_matrix_ptr(env, ms1, NULL);
+    size_t row_bytes = xsmtame_matrix_row_bytes(env, md);
     size_t rows = reg_size / row_bytes;
     size_t row;
 
@@ -1777,17 +1777,17 @@ static void xsmtamev06_mrslide_common(CPURISCVState *env, uint32_t md,
     memcpy(dst, tmp, reg_size);
 }
 
-static void xsmtamev06_mcslide_common(CPURISCVState *env, uint32_t md,
+static void xsmtame_mcslide_common(CPURISCVState *env, uint32_t md,
                                         uint32_t ms1, uint32_t amount,
                                         size_t elem_size, bool up)
 {
     size_t reg_size;
     uint8_t tmp[AME_ACC_LEN_B];
-    uint8_t *dst = xsmtamev06_matrix_ptr(env, md, &reg_size);
-    uint8_t *src = xsmtamev06_matrix_ptr(env, ms1, NULL);
-    size_t row_bytes = xsmtamev06_matrix_row_bytes(env, md);
+    uint8_t *dst = xsmtame_matrix_ptr(env, md, &reg_size);
+    uint8_t *src = xsmtame_matrix_ptr(env, ms1, NULL);
+    size_t row_bytes = xsmtame_matrix_row_bytes(env, md);
     size_t rows = reg_size / row_bytes;
-    size_t cols = xsmtamev06_matrix_col_count(env, md, elem_size);
+    size_t cols = xsmtame_matrix_col_count(env, md, elem_size);
     size_t row;
     size_t col;
 
@@ -1817,70 +1817,70 @@ static void xsmtamev06_mcslide_common(CPURISCVState *env, uint32_t md,
     memcpy(dst, tmp, reg_size);
 }
 
-void HELPER(xsmtamev06_mpack_mm)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mpack_mm)(CPURISCVState *env, uint32_t md,
                                    uint32_t ms2, uint32_t ms1)
 {
-    xsmtamev06_mpack_common(env, md, ms2, ms1, false, false);
+    xsmtame_mpack_common(env, md, ms2, ms1, false, false);
 }
 
-void HELPER(xsmtamev06_mpackhl_mm)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mpackhl_mm)(CPURISCVState *env, uint32_t md,
                                      uint32_t ms2, uint32_t ms1)
 {
-    xsmtamev06_mpack_common(env, md, ms2, ms1, true, false);
+    xsmtame_mpack_common(env, md, ms2, ms1, true, false);
 }
 
-void HELPER(xsmtamev06_mpackhh_mm)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mpackhh_mm)(CPURISCVState *env, uint32_t md,
                                      uint32_t ms2, uint32_t ms1)
 {
-    xsmtamev06_mpack_common(env, md, ms2, ms1, true, true);
+    xsmtame_mpack_common(env, md, ms2, ms1, true, true);
 }
 
-void HELPER(xsmtamev06_mrslidedown)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mrslidedown)(CPURISCVState *env, uint32_t md,
                                       uint32_t ms1, uint32_t amount)
 {
-    xsmtamev06_mrslide_common(env, md, ms1, amount, false);
+    xsmtame_mrslide_common(env, md, ms1, amount, false);
 }
 
-void HELPER(xsmtamev06_mrslideup)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mrslideup)(CPURISCVState *env, uint32_t md,
                                     uint32_t ms1, uint32_t amount)
 {
-    xsmtamev06_mrslide_common(env, md, ms1, amount, true);
+    xsmtame_mrslide_common(env, md, ms1, amount, true);
 }
 
-void HELPER(xsmtamev06_mcslidedown_b)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mcslidedown_b)(CPURISCVState *env, uint32_t md,
                                         uint32_t ms1, uint32_t amount)
 {
-    xsmtamev06_mcslide_common(env, md, ms1, amount, 1, false);
+    xsmtame_mcslide_common(env, md, ms1, amount, 1, false);
 }
 
-void HELPER(xsmtamev06_mcslidedown_h)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mcslidedown_h)(CPURISCVState *env, uint32_t md,
                                         uint32_t ms1, uint32_t amount)
 {
-    xsmtamev06_mcslide_common(env, md, ms1, amount, 2, false);
+    xsmtame_mcslide_common(env, md, ms1, amount, 2, false);
 }
 
-void HELPER(xsmtamev06_mcslidedown_w)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mcslidedown_w)(CPURISCVState *env, uint32_t md,
                                         uint32_t ms1, uint32_t amount)
 {
-    xsmtamev06_mcslide_common(env, md, ms1, amount, 4, false);
+    xsmtame_mcslide_common(env, md, ms1, amount, 4, false);
 }
 
-void HELPER(xsmtamev06_mcslideup_b)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mcslideup_b)(CPURISCVState *env, uint32_t md,
                                       uint32_t ms1, uint32_t amount)
 {
-    xsmtamev06_mcslide_common(env, md, ms1, amount, 1, true);
+    xsmtame_mcslide_common(env, md, ms1, amount, 1, true);
 }
 
-void HELPER(xsmtamev06_mcslideup_h)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mcslideup_h)(CPURISCVState *env, uint32_t md,
                                       uint32_t ms1, uint32_t amount)
 {
-    xsmtamev06_mcslide_common(env, md, ms1, amount, 2, true);
+    xsmtame_mcslide_common(env, md, ms1, amount, 2, true);
 }
 
-void HELPER(xsmtamev06_mcslideup_w)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mcslideup_w)(CPURISCVState *env, uint32_t md,
                                       uint32_t ms1, uint32_t amount)
 {
-    xsmtamev06_mcslide_common(env, md, ms1, amount, 4, true);
+    xsmtame_mcslide_common(env, md, ms1, amount, 4, true);
 }
 
 /*
@@ -1890,7 +1890,7 @@ void HELPER(xsmtamev06_mcslideup_w)(CPURISCVState *env, uint32_t md,
  */
 
 /* mzero{,2,4,8}r : zero count unified matrix register slots starting at md */
-void HELPER(xsmtamev06_mzero)(CPURISCVState *env, uint32_t md,
+void HELPER(xsmtame_mzero)(CPURISCVState *env, uint32_t md,
                                 uint32_t count)
 {
     uint32_t i;
@@ -1910,7 +1910,7 @@ void HELPER(xsmtamev06_mzero)(CPURISCVState *env, uint32_t md,
 }
 
 /* mrelease : set mstatus.MS → 01 (Initial) */
-void HELPER(xsmtamev06_mrelease)(CPURISCVState *env)
+void HELPER(xsmtame_mrelease)(CPURISCVState *env)
 {
 #ifndef CONFIG_USER_ONLY
     /*

@@ -1,5 +1,5 @@
 /*
- * AMEv06 instruction encoding helpers for TCG regression tests.
+ * AME instruction encoding helpers for TCG regression tests.
  *
  * Copyright (c) 2025
  * SPDX-License-Identifier: GPL-2.0-or-later

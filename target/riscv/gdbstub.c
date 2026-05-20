@@ -339,7 +339,7 @@ static GDBFeature *ricsv_gen_dynamic_vector_feature(CPUState *cs, int base_reg)
     return &cpu->dyn_vreg_feature;
 }
 
-static int riscv_gdb_get_xsmtamev06(CPUState *cs, GByteArray *buf, int n)
+static int riscv_gdb_get_xsmtame(CPUState *cs, GByteArray *buf, int n)
 {
     RISCVCPU *cpu = RISCV_CPU(cs);
     CPURISCVState *env = &cpu->env;
@@ -385,7 +385,7 @@ static int riscv_gdb_get_xsmtamev06(CPUState *cs, GByteArray *buf, int n)
     return 0;
 }
 
-static int riscv_gdb_set_xsmtamev06(CPUState *cs, uint8_t *mem_buf, int n)
+static int riscv_gdb_set_xsmtame(CPUState *cs, uint8_t *mem_buf, int n)
 {
     RISCVCPU *cpu = RISCV_CPU(cs);
     CPURISCVState *env = &cpu->env;
@@ -437,16 +437,16 @@ static const char * const ame_tile_regnames[AME_NR_TILES] = {
     "tile0", "tile1", "tile2", "tile3"
 };
 
-static GDBFeature *riscv_gen_dynamic_xsmtamev06_feature(CPUState *cs,
+static GDBFeature *riscv_gen_dynamic_xsmtame_feature(CPUState *cs,
                                                           int base_reg)
 {
     RISCVCPU *cpu = RISCV_CPU(cs);
     GDBFeatureBuilder builder;
     int reg_num = 0;
 
-    gdb_feature_builder_init(&builder, &cpu->dyn_xsmtamev06_feature,
-                             "org.gnu.gdb.riscv.xsmtamev06",
-                             "riscv-xsmtamev06.xml",
+    gdb_feature_builder_init(&builder, &cpu->dyn_xsmtame_feature,
+                             "org.gnu.gdb.riscv.xsmtame",
+                             "riscv-xsmtame.xml",
                              base_reg);
 
     int tlenb        = ame_cfg_tlenb(&cpu->cfg);
@@ -495,7 +495,7 @@ static GDBFeature *riscv_gen_dynamic_xsmtamev06_feature(CPUState *cs,
                                    "int", "matrix");
 
     gdb_feature_builder_end(&builder);
-    return &cpu->dyn_xsmtamev06_feature;
+    return &cpu->dyn_xsmtame_feature;
 }
 
 void riscv_cpu_register_gdb_regs_for_features(CPUState *cs)
@@ -518,10 +518,10 @@ void riscv_cpu_register_gdb_regs_for_features(CPUState *cs)
                                  ricsv_gen_dynamic_vector_feature(cs, cs->gdb_num_regs),
                                  0);
     }
-    if (cpu->cfg.ext_xsmtamev06) {
-        gdb_register_coprocessor(cs, riscv_gdb_get_xsmtamev06,
-                                 riscv_gdb_set_xsmtamev06,
-                                 riscv_gen_dynamic_xsmtamev06_feature(cs, cs->gdb_num_regs),
+    if (cpu->cfg.ext_xsmtame) {
+        gdb_register_coprocessor(cs, riscv_gdb_get_xsmtame,
+                                 riscv_gdb_set_xsmtame,
+                                 riscv_gen_dynamic_xsmtame_feature(cs, cs->gdb_num_regs),
                                  0);
     }
     switch (mcc->def->misa_mxl_max) {
