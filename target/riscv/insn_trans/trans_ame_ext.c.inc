@@ -15,24 +15,6 @@ static bool ame_check_shape_limit(target_ulong val, target_ulong max)
     return val <= max;
 }
 
-static bool ame_check_shape_current(DisasContext *s)
-{
-    /*
-     * mtilem/mtilen/mtilek are runtime state.  Do not read cpu->env here:
-     * earlier msettile* instructions in the same TB have not executed yet
-     * while later instructions are being translated.  Runtime shape validity
-     * is checked in the AME helpers.
-     */
-    (void)s;
-    return true;
-}
-
-static bool ame_check_shape_k_eew(DisasContext *s, uint32_t eew_bits)
-{
-    /* Only static config sanity is legal at translation time. */
-    return eew_bits != 0 && ame_cfg_kmax_eew(s->cfg_ptr, eew_bits) != 0;
-}
-
 static bool ame_check_tile_reg_2(uint32_t reg)
 {
     return reg < AME_NR_TILES;
@@ -96,8 +78,7 @@ static uint32_t ame_acc_slot_from_reg_3(uint32_t reg)
 static bool trans_mlme16(DisasContext *s, arg_ame_load_tile_new *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_matrix_reg_3(a->mx_md3), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_matrix_reg_3(a->mx_md3), s)) {
         return false;
     }
     TCGv addr = get_gpr(s, a->mx_rs1, EXT_NONE);
@@ -124,7 +105,6 @@ static bool trans_mlme8(DisasContext *s, arg_ame_load_tile_new *a)
 
     if (!require_xsmtamev06(s) ||
         !ame_require(ame_check_matrix_reg_3(a->mx_md3), s) ||
-        !ame_require(ame_check_shape_current(s), s) ||
         !ame_require(ame_is_tile_reg_3(a->mx_md3), s)) {
         return false;
     }
@@ -141,8 +121,7 @@ static bool trans_mlme8(DisasContext *s, arg_ame_load_tile_new *a)
 static bool trans_mlae8(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -157,8 +136,7 @@ static bool trans_mlae8(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlae16(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mlae16(tcg_env,
@@ -172,8 +150,7 @@ static bool trans_mlae16(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlae32(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mlae32(tcg_env,
@@ -187,8 +164,7 @@ static bool trans_mlae32(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlbe8(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -203,8 +179,7 @@ static bool trans_mlbe8(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlbe16(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mlbe16(tcg_env,
@@ -218,8 +193,7 @@ static bool trans_mlbe16(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlbe32(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mlbe32(tcg_env,
@@ -233,8 +207,7 @@ static bool trans_mlbe32(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlate8(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -248,8 +221,7 @@ static bool trans_mlate8(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlate16(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mlate16(tcg_env,
@@ -263,8 +235,7 @@ static bool trans_mlate16(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlate32(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mlate32(tcg_env,
@@ -278,8 +249,7 @@ static bool trans_mlate32(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlbte8(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -293,8 +263,7 @@ static bool trans_mlbte8(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlbte32(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mlbte32(tcg_env,
@@ -308,8 +277,7 @@ static bool trans_mlbte32(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlce8(DisasContext *s, arg_ame_load_acc_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -323,8 +291,7 @@ static bool trans_mlce8(DisasContext *s, arg_ame_load_acc_str *a)
 static bool trans_mlce16(DisasContext *s, arg_ame_load_acc_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -338,8 +305,7 @@ static bool trans_mlce16(DisasContext *s, arg_ame_load_acc_str *a)
 static bool trans_mlce32(DisasContext *s, arg_ame_load_acc_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -353,8 +319,7 @@ static bool trans_mlce32(DisasContext *s, arg_ame_load_acc_str *a)
 static bool trans_mlcte8(DisasContext *s, arg_ame_load_acc_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -368,8 +333,7 @@ static bool trans_mlcte8(DisasContext *s, arg_ame_load_acc_str *a)
 static bool trans_mlcte16(DisasContext *s, arg_ame_load_acc_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -383,8 +347,7 @@ static bool trans_mlcte16(DisasContext *s, arg_ame_load_acc_str *a)
 static bool trans_mlcte32(DisasContext *s, arg_ame_load_acc_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -398,8 +361,7 @@ static bool trans_mlcte32(DisasContext *s, arg_ame_load_acc_str *a)
 static bool trans_msae16(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_msae16(tcg_env,
@@ -413,8 +375,7 @@ static bool trans_msae16(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msae32(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_msae32(tcg_env,
@@ -428,8 +389,7 @@ static bool trans_msae32(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msae8(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -444,8 +404,7 @@ static bool trans_msae8(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msbe16(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_msbe16(tcg_env,
@@ -459,8 +418,7 @@ static bool trans_msbe16(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msbe32(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_msbe32(tcg_env,
@@ -474,8 +432,7 @@ static bool trans_msbe32(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msbe8(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -490,8 +447,7 @@ static bool trans_msbe8(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msce8(DisasContext *s, arg_ame_store_acc_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -505,8 +461,7 @@ static bool trans_msce8(DisasContext *s, arg_ame_store_acc_str *a)
 static bool trans_msce16(DisasContext *s, arg_ame_store_acc_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -520,8 +475,7 @@ static bool trans_msce16(DisasContext *s, arg_ame_store_acc_str *a)
 static bool trans_msce32(DisasContext *s, arg_ame_store_acc_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -535,8 +489,7 @@ static bool trans_msce32(DisasContext *s, arg_ame_store_acc_str *a)
 static bool trans_msate8(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -550,8 +503,7 @@ static bool trans_msate8(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msate32(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_msate32(tcg_env,
@@ -565,8 +517,7 @@ static bool trans_msate32(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msbte8(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -580,8 +531,7 @@ static bool trans_msbte8(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_mscte8(DisasContext *s, arg_ame_store_acc_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -595,8 +545,7 @@ static bool trans_mscte8(DisasContext *s, arg_ame_store_acc_str *a)
 static bool trans_mscte16(DisasContext *s, arg_ame_store_acc_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -610,8 +559,7 @@ static bool trans_mscte16(DisasContext *s, arg_ame_store_acc_str *a)
 static bool trans_mscte32(DisasContext *s, arg_ame_store_acc_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
         return false;
     }
 
@@ -625,8 +573,7 @@ static bool trans_mscte32(DisasContext *s, arg_ame_store_acc_str *a)
 static bool trans_msme16(DisasContext *s, arg_ame_store_tile_new *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_matrix_reg_3(a->mx_md3), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_matrix_reg_3(a->mx_md3), s)) {
         return false;
     }
     if (ame_is_tile_reg_3(a->mx_md3)) {
@@ -652,7 +599,6 @@ static bool trans_msme8(DisasContext *s, arg_ame_store_tile_new *a)
 
     if (!require_xsmtamev06(s) ||
         !ame_require(ame_check_matrix_reg_3(a->mx_md3), s) ||
-        !ame_require(ame_check_shape_current(s), s) ||
         !ame_require(ame_is_tile_reg_3(a->mx_md3), s)) {
         return false;
     }
@@ -669,8 +615,7 @@ static bool trans_msme8(DisasContext *s, arg_ame_store_tile_new *a)
 static bool trans_msbte16(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_msbte16(tcg_env,
@@ -684,8 +629,7 @@ static bool trans_msbte16(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msbte32(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_msbte32(tcg_env,
@@ -699,8 +643,7 @@ static bool trans_msbte32(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msate16(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_msate16(tcg_env,
@@ -714,8 +657,7 @@ static bool trans_msate16(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_mlbte16(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mlbte16(tcg_env,
@@ -741,8 +683,7 @@ static bool trans_mlbte16(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlme32(DisasContext *s, arg_ame_store_acc_new *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_matrix_reg_3(a->mx_md3), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_matrix_reg_3(a->mx_md3), s)) {
         return false;
     }
     TCGv addr = get_gpr(s, a->mx_rs1, EXT_NONE);
@@ -765,8 +706,7 @@ static bool trans_mlme32(DisasContext *s, arg_ame_store_acc_new *a)
 static bool trans_msme32(DisasContext *s, arg_ame_store_acc_new *a)
 {
     if (!require_xsmtamev06(s) ||
-        !ame_require(ame_check_matrix_reg_3(a->mx_md3), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+        !ame_require(ame_check_matrix_reg_3(a->mx_md3), s)) {
         return false;
     }
     TCGv addr = get_gpr(s, a->mx_rs1, EXT_NONE);
@@ -805,8 +745,7 @@ static bool trans_mmacc_w_b(DisasContext *s, arg_ame_matmul_acc *a)
     }
     if (!ame_require(ame_check_acc_reg_2(a->mx_ad2) &&
                      ame_is_tile_reg_3(a->mx_ms1_3) &&
-                     ame_is_tile_reg_3(a->mx_ms2_3), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+                     ame_is_tile_reg_3(a->mx_ms2_3), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mmacc_w_b(tcg_env,
@@ -824,8 +763,7 @@ static bool trans_mmaccu_w_b(DisasContext *s, arg_ame_matmul_acc *a)
     }
     if (!ame_require(ame_check_acc_reg_2(a->mx_ad2) &&
                      ame_is_tile_reg_3(a->mx_ms1_3) &&
-                     ame_is_tile_reg_3(a->mx_ms2_3), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+                     ame_is_tile_reg_3(a->mx_ms2_3), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mmaccu_w_b(tcg_env,
@@ -843,8 +781,7 @@ static bool trans_mmaccus_w_b(DisasContext *s, arg_ame_matmul_acc *a)
     }
     if (!ame_require(ame_check_acc_reg_2(a->mx_ad2) &&
                      ame_is_tile_reg_3(a->mx_ms1_3) &&
-                     ame_is_tile_reg_3(a->mx_ms2_3), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+                     ame_is_tile_reg_3(a->mx_ms2_3), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mmaccus_w_b(tcg_env,
@@ -862,8 +799,7 @@ static bool trans_mmaccsu_w_b(DisasContext *s, arg_ame_matmul_acc *a)
     }
     if (!ame_require(ame_check_acc_reg_2(a->mx_ad2) &&
                      ame_is_tile_reg_3(a->mx_ms1_3) &&
-                     ame_is_tile_reg_3(a->mx_ms2_3), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+                     ame_is_tile_reg_3(a->mx_ms2_3), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mmaccsu_w_b(tcg_env,
@@ -881,8 +817,7 @@ static bool trans_mfmacc_h_e5(DisasContext *s, arg_ame_matmul_acc *a)
     }
     if (!ame_require(ame_check_acc_reg_2(a->mx_ad2) &&
                      ame_is_tile_reg_3(a->mx_ms1_3) &&
-                     ame_is_tile_reg_3(a->mx_ms2_3), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+                     ame_is_tile_reg_3(a->mx_ms2_3), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mfmacc_h_e5(tcg_env,
@@ -900,8 +835,7 @@ static bool trans_mfmacc_h_e4(DisasContext *s, arg_ame_matmul_acc *a)
     }
     if (!ame_require(ame_check_acc_reg_2(a->mx_ad2) &&
                      ame_is_tile_reg_3(a->mx_ms1_3) &&
-                     ame_is_tile_reg_3(a->mx_ms2_3), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+                     ame_is_tile_reg_3(a->mx_ms2_3), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mfmacc_h_e4(tcg_env,
@@ -919,8 +853,7 @@ static bool trans_mfmacc_bf16_e5(DisasContext *s, arg_ame_matmul_acc *a)
     }
     if (!ame_require(ame_check_acc_reg_2(a->mx_ad2) &&
                      ame_is_tile_reg_3(a->mx_ms1_3) &&
-                     ame_is_tile_reg_3(a->mx_ms2_3), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+                     ame_is_tile_reg_3(a->mx_ms2_3), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mfmacc_bf16_e5(tcg_env,
@@ -938,8 +871,7 @@ static bool trans_mfmacc_bf16_e4(DisasContext *s, arg_ame_matmul_acc *a)
     }
     if (!ame_require(ame_check_acc_reg_2(a->mx_ad2) &&
                      ame_is_tile_reg_3(a->mx_ms1_3) &&
-                     ame_is_tile_reg_3(a->mx_ms2_3), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+                     ame_is_tile_reg_3(a->mx_ms2_3), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mfmacc_bf16_e4(tcg_env,
@@ -957,8 +889,7 @@ static bool trans_mfmacc_h(DisasContext *s, arg_ame_matmul_acc *a)
     }
     if (!ame_require(ame_check_acc_reg_2(a->mx_ad2) &&
                      ame_is_tile_reg_3(a->mx_ms1_3) &&
-                     ame_is_tile_reg_3(a->mx_ms2_3), s) ||
-        !ame_require(ame_check_shape_k_eew(s, 16), s)) {
+                     ame_is_tile_reg_3(a->mx_ms2_3), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mfmacc_h(tcg_env,
@@ -976,8 +907,7 @@ static bool trans_mfmacc_s_h(DisasContext *s, arg_ame_matmul_acc *a)
     }
     if (!ame_require(ame_check_acc_reg_2(a->mx_ad2) &&
                      ame_is_tile_reg_3(a->mx_ms1_3) &&
-                     ame_is_tile_reg_3(a->mx_ms2_3), s) ||
-        !ame_require(ame_check_shape_k_eew(s, 16), s)) {
+                     ame_is_tile_reg_3(a->mx_ms2_3), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mfmacc_s_h(tcg_env,
@@ -995,8 +925,7 @@ static bool trans_mfmacc_s_bf16(DisasContext *s, arg_ame_matmul_acc *a)
     }
     if (!ame_require(ame_check_acc_reg_2(a->mx_ad2) &&
                      ame_is_tile_reg_3(a->mx_ms1_3) &&
-                     ame_is_tile_reg_3(a->mx_ms2_3), s) ||
-        !ame_require(ame_check_shape_k_eew(s, 16), s)) {
+                     ame_is_tile_reg_3(a->mx_ms2_3), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mfmacc_s_bf16(tcg_env,
@@ -1014,8 +943,7 @@ static bool trans_mfmacc_s_e4(DisasContext *s, arg_ame_matmul_acc *a)
     }
     if (!ame_require(ame_check_acc_reg_2(a->mx_ad2) &&
                      ame_is_tile_reg_3(a->mx_ms1_3) &&
-                     ame_is_tile_reg_3(a->mx_ms2_3), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+                     ame_is_tile_reg_3(a->mx_ms2_3), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mfmacc_s_e4(tcg_env,
@@ -1033,8 +961,7 @@ static bool trans_mfmacc_s_e5(DisasContext *s, arg_ame_matmul_acc *a)
     }
     if (!ame_require(ame_check_acc_reg_2(a->mx_ad2) &&
                      ame_is_tile_reg_3(a->mx_ms1_3) &&
-                     ame_is_tile_reg_3(a->mx_ms2_3), s) ||
-        !ame_require(ame_check_shape_current(s), s)) {
+                     ame_is_tile_reg_3(a->mx_ms2_3), s)) {
         return false;
     }
     gen_helper_xsmtamev06_mfmacc_s_e5(tcg_env,
