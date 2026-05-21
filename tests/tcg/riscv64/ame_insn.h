@@ -18,6 +18,11 @@
 #define AME_SETI_ENC(func4, imm10) \
     (((uint32_t)(func4) << 28) | (((uint32_t)(imm10) & 0x3ffu) << 15) | AME_OP)
 
+#define AME_MEM_NEW_ENC(store, size, md, rs1) \
+    (((uint32_t)0x3 << 28) | ((uint32_t)0x1 << 26) | \
+     (((uint32_t)(store) & 0x1u) << 25) | (((uint32_t)(rs1) & 0x1fu) << 15) | \
+     (((uint32_t)(size) & 0x3u) << 10) | (((uint32_t)(md) & 0x7u) << 7) | AME_OP)
+
 #define AME_ZERO_ENC(count_enc, md) \
     (((uint32_t)0x0 << 28) | ((uint32_t)0x3 << 26) | \
      (((uint32_t)(count_enc) & 0x7u) << 23) | (((uint32_t)(md) & 0x7u) << 7) | \
@@ -53,6 +58,13 @@
      (((uint32_t)(vd) & 0x1fu) << 7) | AME_OP)
 
 #define MZERO8R(md) AME_ZERO_ENC(0x7, md)
+
+#define MLME8(md, rs1) AME_MEM_NEW_ENC(0, 0x0, md, rs1)
+#define MSME8(md, rs1) AME_MEM_NEW_ENC(1, 0x0, md, rs1)
+#define MLME16(md, rs1) AME_MEM_NEW_ENC(0, 0x1, md, rs1)
+#define MSME16(md, rs1) AME_MEM_NEW_ENC(1, 0x1, md, rs1)
+#define MLME32(md, rs1) AME_MEM_NEW_ENC(0, 0x2, md, rs1)
+#define MSME32(md, rs1) AME_MEM_NEW_ENC(1, 0x2, md, rs1)
 
 #define MMOV_MM(md, ms1) AME_MISC_MM_ENC(0x1, 0x0, md, 0, ms1)
 #define MMOVB_X_M(rd, ms2, rs1) AME_MISC_TO_GPR_ENC(0x0, rd, ms2, rs1)

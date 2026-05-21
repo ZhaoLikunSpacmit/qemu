@@ -30,15 +30,6 @@ static bool ame_check_matrix_reg_3(uint32_t reg)
     return reg < AME_NR_TILES + AME_NR_ACCS;
 }
 
-static bool ame_require(bool cond, DisasContext *s)
-{
-    if (!cond) {
-        gen_exception_illegal(s);
-        return false;
-    }
-    return true;
-}
-
 static bool ame_is_tile_reg_3(uint32_t reg)
 {
     return reg < AME_NR_TILES;
@@ -49,85 +40,62 @@ static bool ame_is_acc_reg_3(uint32_t reg)
     return reg >= AME_NR_TILES && reg < AME_NR_TILES + AME_NR_ACCS;
 }
 
-static bool ame_same_reg_class_3(uint32_t lhs, uint32_t rhs)
+static bool ame_same_reg_class_3(uint32_t a, uint32_t b)
 {
-    return (ame_is_tile_reg_3(lhs) && ame_is_tile_reg_3(rhs)) ||
-           (ame_is_acc_reg_3(lhs) && ame_is_acc_reg_3(rhs));
+    return (ame_is_tile_reg_3(a) && ame_is_tile_reg_3(b)) ||
+           (ame_is_acc_reg_3(a) && ame_is_acc_reg_3(b));
 }
 
-static uint32_t ame_acc_slot_from_reg_3(uint32_t reg)
+static bool ame_require(bool cond, DisasContext *s)
 {
-    return reg - AME_NR_TILES;
-}
-
-/*
- * ──────────────────────────────────────────
- *  Load / store  (tile)
- * ──────────────────────────────────────────
- *
- * mlme8 / mlme16 : load tile  from mem
- * mlae16 / mlbe16 : strided load A / B tiles from mem
- * mlate16 / mlbte16 : strided load A / B_T tiles from mem
- * msae16 / msbe16 : strided store A / B tiles to mem
- * msate16 / msbte16 : strided transpose-store A / B tiles to mem
- * msme8 / msme16 : store tile to mem
- *
- * New mlme16 helper signature: void helper(env, tile_id, addr)
- */
-
-static bool trans_mlme16(DisasContext *s, arg_ame_load_tile_new *a)
-{
-    if (!require_xsmtame(s) ||
-        !ame_require(ame_check_matrix_reg_3(a->mx_md3), s)) {
-        return false;
-    }
-    TCGv addr = get_gpr(s, a->mx_rs1, EXT_NONE);
-    if (ame_is_tile_reg_3(a->mx_md3)) {
-        gen_helper_xsmtame_mlme16(tcg_env,
-                              tcg_constant_i32(a->mx_md3),
-                              addr);
-    } else if (ame_is_acc_reg_3(a->mx_md3)) {
-        gen_helper_xsmtame_mlme32(tcg_env,
-                              tcg_constant_i32(ame_acc_slot_from_reg_3(a->mx_md3)),
-                              addr);
-    } else {
+    if (!cond) {
         gen_exception_illegal(s);
-        return false;
-    }
-    mark_ms_dirty(s);
-    return true;
-}
-
-static bool trans_mlme8(DisasContext *s, arg_ame_load_tile_new *a)
-{
-    TCGv addr;
-    TCGv stride;
-
-    if (!require_xsmtame(s) ||
-        !ame_require(ame_check_matrix_reg_3(a->mx_md3), s) ||
-        !ame_require(ame_is_tile_reg_3(a->mx_md3), s)) {
-        return false;
     }
 
-    addr = get_gpr(s, a->mx_rs1, EXT_NONE);
-    stride = tcg_temp_new();
-    tcg_gen_ld_tl(stride, tcg_env, offsetof(CPURISCVState, mtilek));
-    gen_helper_xsmtame_mlme8(tcg_env, tcg_constant_i32(a->mx_md3),
-                                  addr, stride);
-    mark_ms_dirty(s);
-    return true;
+    return cond;
 }
+
+#define GEN_XSMTAME_WHOLE_LOAD_TRANS(NAME, ARGTYPE, HELPER)                 \
+    static bool NAME(DisasContext *s, ARGTYPE *a)                           \
+    {                                                                       \
+        if (!require_xsmtame(s) ||                                          \
+            !ame_require(ame_check_matrix_reg_3(a->mx_md3), s)) {           \
+            return false;                                                   \
+        }                                                                   \
+        gen_helper_##HELPER(tcg_env, tcg_constant_i32(a->mx_md3),           \
+                            get_gpr(s, a->mx_rs1, EXT_NONE));               \
+        mark_ms_dirty(s);                                                   \
+        return true;                                                        \
+    }
+
+#define GEN_XSMTAME_WHOLE_STORE_TRANS(NAME, ARGTYPE, HELPER)                \
+    static bool NAME(DisasContext *s, ARGTYPE *a)                           \
+    {                                                                       \
+        if (!require_xsmtame(s) ||                                          \
+            !ame_require(ame_check_matrix_reg_3(a->mx_md3), s)) {           \
+            return false;                                                   \
+        }                                                                   \
+        gen_helper_##HELPER(tcg_env, tcg_constant_i32(a->mx_md3),           \
+                            get_gpr(s, a->mx_rs1, EXT_NONE));               \
+        mark_ms_dirty(s);                                                   \
+        return true;                                                        \
+    }
+
+GEN_XSMTAME_WHOLE_LOAD_TRANS(trans_mlme8, arg_ame_load_matrix,
+                             xsmtame_mlme8)
+GEN_XSMTAME_WHOLE_LOAD_TRANS(trans_mlme16, arg_ame_load_matrix,
+                             xsmtame_mlme16)
 
 static bool trans_mlae8(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
 
     TCGv addr = get_gpr(s, a->mx_rs1, EXT_NONE);
     TCGv stride = get_gpr(s, a->mx_rs2, EXT_NONE);
-    gen_helper_xsmtame_mlae8(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_mlae8(tcg_env, tcg_constant_i32(a->mx_td2),
                                   addr, stride);
     mark_ms_dirty(s);
     return true;
@@ -136,11 +104,11 @@ static bool trans_mlae8(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlae16(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_mlae16(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -150,11 +118,11 @@ static bool trans_mlae16(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlae32(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_mlae32(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -164,13 +132,13 @@ static bool trans_mlae32(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlbe8(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
 
     TCGv addr = get_gpr(s, a->mx_rs1, EXT_NONE);
     TCGv stride = get_gpr(s, a->mx_rs2, EXT_NONE);
-    gen_helper_xsmtame_mlbe8(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_mlbe8(tcg_env, tcg_constant_i32(a->mx_td2),
                                   addr, stride);
     mark_ms_dirty(s);
     return true;
@@ -179,11 +147,11 @@ static bool trans_mlbe8(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlbe16(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_mlbe16(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -193,11 +161,11 @@ static bool trans_mlbe16(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlbe32(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_mlbe32(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -207,11 +175,11 @@ static bool trans_mlbe32(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlate8(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_mlate8(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_mlate8(tcg_env, tcg_constant_i32(a->mx_td2),
                                    get_gpr(s, a->mx_rs1, EXT_NONE),
                                    get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -221,11 +189,11 @@ static bool trans_mlate8(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlate16(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_mlate16(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -235,11 +203,11 @@ static bool trans_mlate16(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlate32(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_mlate32(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -249,11 +217,11 @@ static bool trans_mlate32(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlbte8(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_mlbte8(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_mlbte8(tcg_env, tcg_constant_i32(a->mx_td2),
                                    get_gpr(s, a->mx_rs1, EXT_NONE),
                                    get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -263,11 +231,11 @@ static bool trans_mlbte8(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlbte32(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_mlbte32(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -277,11 +245,11 @@ static bool trans_mlbte32(DisasContext *s, arg_ame_load_tile_str *a)
 static bool trans_mlce8(DisasContext *s, arg_ame_load_acc_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_ad2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_mlce8(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_mlce8(tcg_env, tcg_constant_i32(a->mx_ad2),
                                   get_gpr(s, a->mx_rs1, EXT_NONE),
                                   get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -291,11 +259,11 @@ static bool trans_mlce8(DisasContext *s, arg_ame_load_acc_str *a)
 static bool trans_mlce16(DisasContext *s, arg_ame_load_acc_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_ad2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_mlce16(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_mlce16(tcg_env, tcg_constant_i32(a->mx_ad2),
                                    get_gpr(s, a->mx_rs1, EXT_NONE),
                                    get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -305,11 +273,11 @@ static bool trans_mlce16(DisasContext *s, arg_ame_load_acc_str *a)
 static bool trans_mlce32(DisasContext *s, arg_ame_load_acc_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_ad2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_mlce32(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_mlce32(tcg_env, tcg_constant_i32(a->mx_ad2),
                                    get_gpr(s, a->mx_rs1, EXT_NONE),
                                    get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -319,11 +287,11 @@ static bool trans_mlce32(DisasContext *s, arg_ame_load_acc_str *a)
 static bool trans_mlcte8(DisasContext *s, arg_ame_load_acc_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_ad2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_mlcte8(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_mlcte8(tcg_env, tcg_constant_i32(a->mx_ad2),
                                    get_gpr(s, a->mx_rs1, EXT_NONE),
                                    get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -333,11 +301,11 @@ static bool trans_mlcte8(DisasContext *s, arg_ame_load_acc_str *a)
 static bool trans_mlcte16(DisasContext *s, arg_ame_load_acc_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_ad2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_mlcte16(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_mlcte16(tcg_env, tcg_constant_i32(a->mx_ad2),
                                     get_gpr(s, a->mx_rs1, EXT_NONE),
                                     get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -347,11 +315,11 @@ static bool trans_mlcte16(DisasContext *s, arg_ame_load_acc_str *a)
 static bool trans_mlcte32(DisasContext *s, arg_ame_load_acc_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_ad2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_mlcte32(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_mlcte32(tcg_env, tcg_constant_i32(a->mx_ad2),
                                     get_gpr(s, a->mx_rs1, EXT_NONE),
                                     get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -361,11 +329,11 @@ static bool trans_mlcte32(DisasContext *s, arg_ame_load_acc_str *a)
 static bool trans_msae16(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_msae16(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -375,11 +343,11 @@ static bool trans_msae16(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msae32(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_msae32(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -389,13 +357,13 @@ static bool trans_msae32(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msae8(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
 
     TCGv addr = get_gpr(s, a->mx_rs1, EXT_NONE);
     TCGv stride = get_gpr(s, a->mx_rs2, EXT_NONE);
-    gen_helper_xsmtame_msae8(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_msae8(tcg_env, tcg_constant_i32(a->mx_td2),
                                   addr, stride);
     mark_ms_dirty(s);
     return true;
@@ -404,11 +372,11 @@ static bool trans_msae8(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msbe16(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_msbe16(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -418,11 +386,11 @@ static bool trans_msbe16(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msbe32(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_msbe32(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -432,13 +400,13 @@ static bool trans_msbe32(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msbe8(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
 
     TCGv addr = get_gpr(s, a->mx_rs1, EXT_NONE);
     TCGv stride = get_gpr(s, a->mx_rs2, EXT_NONE);
-    gen_helper_xsmtame_msbe8(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_msbe8(tcg_env, tcg_constant_i32(a->mx_td2),
                                   addr, stride);
     mark_ms_dirty(s);
     return true;
@@ -447,11 +415,11 @@ static bool trans_msbe8(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msce8(DisasContext *s, arg_ame_store_acc_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_ad2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_msce8(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_msce8(tcg_env, tcg_constant_i32(a->mx_ad2),
                                   get_gpr(s, a->mx_rs1, EXT_NONE),
                                   get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -461,11 +429,11 @@ static bool trans_msce8(DisasContext *s, arg_ame_store_acc_str *a)
 static bool trans_msce16(DisasContext *s, arg_ame_store_acc_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_ad2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_msce16(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_msce16(tcg_env, tcg_constant_i32(a->mx_ad2),
                                    get_gpr(s, a->mx_rs1, EXT_NONE),
                                    get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -475,11 +443,11 @@ static bool trans_msce16(DisasContext *s, arg_ame_store_acc_str *a)
 static bool trans_msce32(DisasContext *s, arg_ame_store_acc_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_ad2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_msce32(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_msce32(tcg_env, tcg_constant_i32(a->mx_ad2),
                                    get_gpr(s, a->mx_rs1, EXT_NONE),
                                    get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -489,11 +457,11 @@ static bool trans_msce32(DisasContext *s, arg_ame_store_acc_str *a)
 static bool trans_msate8(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_msate8(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_msate8(tcg_env, tcg_constant_i32(a->mx_td2),
                                    get_gpr(s, a->mx_rs1, EXT_NONE),
                                    get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -503,11 +471,11 @@ static bool trans_msate8(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msate32(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_msate32(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -517,11 +485,11 @@ static bool trans_msate32(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msbte8(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_msbte8(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_msbte8(tcg_env, tcg_constant_i32(a->mx_td2),
                                    get_gpr(s, a->mx_rs1, EXT_NONE),
                                    get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -531,11 +499,11 @@ static bool trans_msbte8(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_mscte8(DisasContext *s, arg_ame_store_acc_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_ad2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_mscte8(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_mscte8(tcg_env, tcg_constant_i32(a->mx_ad2),
                                    get_gpr(s, a->mx_rs1, EXT_NONE),
                                    get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -545,11 +513,11 @@ static bool trans_mscte8(DisasContext *s, arg_ame_store_acc_str *a)
 static bool trans_mscte16(DisasContext *s, arg_ame_store_acc_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_ad2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_mscte16(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_mscte16(tcg_env, tcg_constant_i32(a->mx_ad2),
                                     get_gpr(s, a->mx_rs1, EXT_NONE),
                                     get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -559,67 +527,30 @@ static bool trans_mscte16(DisasContext *s, arg_ame_store_acc_str *a)
 static bool trans_mscte32(DisasContext *s, arg_ame_store_acc_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_acc_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_acc_reg_2(a->mx_ad2), s)) {
         return false;
     }
 
-    gen_helper_xsmtame_mscte32(tcg_env, tcg_constant_i32(a->mx_md2),
+    gen_helper_xsmtame_mscte32(tcg_env, tcg_constant_i32(a->mx_ad2),
                                     get_gpr(s, a->mx_rs1, EXT_NONE),
                                     get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
     return true;
 }
 
-static bool trans_msme16(DisasContext *s, arg_ame_store_tile_new *a)
-{
-    if (!require_xsmtame(s) ||
-        !ame_require(ame_check_matrix_reg_3(a->mx_md3), s)) {
-        return false;
-    }
-    if (ame_is_tile_reg_3(a->mx_md3)) {
-        gen_helper_xsmtame_msme16(tcg_env,
-                              tcg_constant_i32(a->mx_md3),
-                              get_gpr(s, a->mx_rs1, EXT_NONE));
-    } else if (ame_is_acc_reg_3(a->mx_md3)) {
-        gen_helper_xsmtame_msme32(tcg_env,
-                              tcg_constant_i32(ame_acc_slot_from_reg_3(a->mx_md3)),
-                              get_gpr(s, a->mx_rs1, EXT_NONE));
-    } else {
-        gen_exception_illegal(s);
-        return false;
-    }
-    mark_ms_dirty(s);
-    return true;
-}
-
-static bool trans_msme8(DisasContext *s, arg_ame_store_tile_new *a)
-{
-    TCGv addr;
-    TCGv stride;
-
-    if (!require_xsmtame(s) ||
-        !ame_require(ame_check_matrix_reg_3(a->mx_md3), s) ||
-        !ame_require(ame_is_tile_reg_3(a->mx_md3), s)) {
-        return false;
-    }
-
-    addr = get_gpr(s, a->mx_rs1, EXT_NONE);
-    stride = tcg_temp_new();
-    tcg_gen_ld_tl(stride, tcg_env, offsetof(CPURISCVState, mtilek));
-    gen_helper_xsmtame_msme8(tcg_env, tcg_constant_i32(a->mx_md3),
-                                  addr, stride);
-    mark_ms_dirty(s);
-    return true;
-}
+GEN_XSMTAME_WHOLE_STORE_TRANS(trans_msme8, arg_ame_store_matrix,
+                              xsmtame_msme8)
+GEN_XSMTAME_WHOLE_STORE_TRANS(trans_msme16, arg_ame_store_matrix,
+                              xsmtame_msme16)
 
 static bool trans_msbte16(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_msbte16(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -629,11 +560,11 @@ static bool trans_msbte16(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msbte32(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_msbte32(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -643,11 +574,11 @@ static bool trans_msbte32(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_msate16(DisasContext *s, arg_ame_store_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_msate16(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
@@ -657,74 +588,21 @@ static bool trans_msate16(DisasContext *s, arg_ame_store_tile_str *a)
 static bool trans_mlbte16(DisasContext *s, arg_ame_load_tile_str *a)
 {
     if (!require_xsmtame(s) ||
-        !ame_require(ame_check_tile_reg_2(a->mx_md2), s)) {
+        !ame_require(ame_check_tile_reg_2(a->mx_td2), s)) {
         return false;
     }
     gen_helper_xsmtame_mlbte16(tcg_env,
-                          tcg_constant_i32(a->mx_md2),
+                          tcg_constant_i32(a->mx_td2),
                           get_gpr(s, a->mx_rs1, EXT_NONE),
                           get_gpr(s, a->mx_rs2, EXT_NONE));
     mark_ms_dirty(s);
     return true;
 }
 
-/*
- * ──────────────────────────────────────────
- *  Load / store  (acc)
- * ──────────────────────────────────────────
- *
- * mlme32 : load acc  from mem
- * msme32 : store acc to mem
- *
- * New mlme32 helper signature: void helper(env, acc_id, addr)
- * New msme32 helper signature: void helper(env, acc_id, addr)
- */
-
-static bool trans_mlme32(DisasContext *s, arg_ame_store_acc_new *a)
-{
-    if (!require_xsmtame(s) ||
-        !ame_require(ame_check_matrix_reg_3(a->mx_md3), s)) {
-        return false;
-    }
-    TCGv addr = get_gpr(s, a->mx_rs1, EXT_NONE);
-    if (ame_is_tile_reg_3(a->mx_md3)) {
-        gen_helper_xsmtame_mlme16(tcg_env,
-                              tcg_constant_i32(a->mx_md3),
-                              addr);
-    } else if (ame_is_acc_reg_3(a->mx_md3)) {
-        gen_helper_xsmtame_mlme32(tcg_env,
-                              tcg_constant_i32(ame_acc_slot_from_reg_3(a->mx_md3)),
-                              addr);
-    } else {
-        gen_exception_illegal(s);
-        return false;
-    }
-    mark_ms_dirty(s);
-    return true;
-}
-
-static bool trans_msme32(DisasContext *s, arg_ame_store_acc_new *a)
-{
-    if (!require_xsmtame(s) ||
-        !ame_require(ame_check_matrix_reg_3(a->mx_md3), s)) {
-        return false;
-    }
-    TCGv addr = get_gpr(s, a->mx_rs1, EXT_NONE);
-    if (ame_is_tile_reg_3(a->mx_md3)) {
-        gen_helper_xsmtame_msme16(tcg_env,
-                              tcg_constant_i32(a->mx_md3),
-                              addr);
-    } else if (ame_is_acc_reg_3(a->mx_md3)) {
-        gen_helper_xsmtame_msme32(tcg_env,
-                              tcg_constant_i32(ame_acc_slot_from_reg_3(a->mx_md3)),
-                              addr);
-    } else {
-        gen_exception_illegal(s);
-        return false;
-    }
-    mark_ms_dirty(s);
-    return true;
-}
+GEN_XSMTAME_WHOLE_LOAD_TRANS(trans_mlme32, arg_ame_load_matrix,
+                             xsmtame_mlme32)
+GEN_XSMTAME_WHOLE_STORE_TRANS(trans_msme32, arg_ame_store_matrix,
+                              xsmtame_msme32)
 
 /*
  * ──────────────────────────────────────────
@@ -984,7 +862,7 @@ static bool trans_mfmacc_s_e5(DisasContext *s, arg_ame_matmul_acc *a)
  * These are pure TCG ops, no helper needed.
  */
 
-static bool trans_msettilemi(DisasContext *s, arg_ame_settile_new *a)
+static bool trans_msettilemi(DisasContext *s, arg_msettilemi *a)
 {
     if (!require_xsmtame(s)) {
         return false;
@@ -1000,7 +878,7 @@ static bool trans_msettilemi(DisasContext *s, arg_ame_settile_new *a)
     return true;
 }
 
-static bool trans_msettileni(DisasContext *s, arg_ame_settile_new *a)
+static bool trans_msettileni(DisasContext *s, arg_msettileni *a)
 {
     if (!require_xsmtame(s)) {
         return false;
@@ -1016,7 +894,7 @@ static bool trans_msettileni(DisasContext *s, arg_ame_settile_new *a)
     return true;
 }
 
-static bool trans_msettileki(DisasContext *s, arg_ame_settile_new *a)
+static bool trans_msettileki(DisasContext *s, arg_msettileki *a)
 {
     if (!require_xsmtame(s)) {
         return false;
@@ -1437,50 +1315,50 @@ static bool trans_mcslideup_w(DisasContext *s, arg_ame_misc_slide *a)
  * ──────────────────────────────────────────
  */
 
-static bool trans_mzero_common(DisasContext *s, arg_ame_zero_new *a,
+static bool trans_mzero_common(DisasContext *s, uint32_t mx_md3,
                                uint32_t expected_count)
 {
     if (!require_xsmtame(s)) {
         return false;
     }
 
-    if (!ame_require(ame_check_matrix_reg_3(a->mx_md3), s)) {
+    if (!ame_require(ame_check_matrix_reg_3(mx_md3), s)) {
         return false;
     }
 
-    if (!ame_require((a->mx_md3 & (expected_count - 1)) == 0, s)) {
+    if (!ame_require((mx_md3 & (expected_count - 1)) == 0, s)) {
         return false;
     }
 
-    if (!ame_require(a->mx_md3 + expected_count <= AME_NR_TILES + AME_NR_ACCS, s)) {
+    if (!ame_require(mx_md3 + expected_count <= AME_NR_TILES + AME_NR_ACCS, s)) {
         return false;
     }
 
     gen_helper_xsmtame_mzero(tcg_env,
-                                  tcg_constant_i32(a->mx_md3),
+                                  tcg_constant_i32(mx_md3),
                                   tcg_constant_i32(expected_count));
     mark_ms_dirty(s);
     return true;
 }
 
-static bool trans_mzero(DisasContext *s, arg_ame_zero_new *a)
+static bool trans_mzero(DisasContext *s, arg_mzero *a)
 {
-    return trans_mzero_common(s, a, 1);
+    return trans_mzero_common(s, a->mx_md3, 1);
 }
 
-static bool trans_mzero2r(DisasContext *s, arg_ame_zero_new *a)
+static bool trans_mzero2r(DisasContext *s, arg_mzero2r *a)
 {
-    return trans_mzero_common(s, a, 2);
+    return trans_mzero_common(s, a->mx_md3, 2);
 }
 
-static bool trans_mzero4r(DisasContext *s, arg_ame_zero_new *a)
+static bool trans_mzero4r(DisasContext *s, arg_mzero4r *a)
 {
-    return trans_mzero_common(s, a, 4);
+    return trans_mzero_common(s, a->mx_md3, 4);
 }
 
-static bool trans_mzero8r(DisasContext *s, arg_ame_zero_new *a)
+static bool trans_mzero8r(DisasContext *s, arg_mzero8r *a)
 {
-    return trans_mzero_common(s, a, 8);
+    return trans_mzero_common(s, a->mx_md3, 8);
 }
 
 static bool trans_mrelease(DisasContext *s, arg_ame_release *a)

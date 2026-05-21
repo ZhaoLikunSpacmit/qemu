@@ -3,7 +3,7 @@
 #
 # Opcode: custom-1 = 0101011 (0x2b)
 #
-# New encoding model:
+# Encoding model:
 #   [31:28] func      major operation class
 #   [27:26] uop       sub-operation selector
 #   [25:23] misc      count/size/qualifier bits depending on instruction
@@ -23,23 +23,22 @@
 %mx_rs2      20:5         # GPR rs2/stride bits [24:20]
 %mx_uimm10   15:10        # immediate bits [24:15]
 %mx_uimm3    23:3         # immediate bits [25:23]
-%mx_md2      7:2          # tile register bits [8:7], i.e. md[1:0] with md[2]=0
+%mx_td2      7:2          # tile register bits [8:7], i.e. md[1:0] with md[2]=0
 %mx_ad2      7:2          # acc register bits [8:7], with md[2] fixed to 1 in pattern
 %mx_md3      7:3          # matrix register bits [9:7]: 0..3=>tile/tr0..3, 4..7=>acc0..3
 %mx_ms1_3    15:3         # matrix source-1 bits [17:15]: 0..3=>tile/tr0..3, 4..7=>acc0..3
 %mx_ms2_3    20:3         # matrix source-2 bits [22:20]: 0..3=>tile/tr0..3, 4..7=>acc0..3
 
 # === Argument sets ===
-&ame_settile_new   mx_uimm10
-&ame_settile_reg   mx_rs1
-&ame_zero_new      mx_md3
-&ame_load_tile_new mx_md3 mx_rs1
-&ame_load_tile_str mx_md2 mx_rs1 mx_rs2
-&ame_load_acc_str  mx_md2 mx_rs1 mx_rs2
-&ame_store_tile_new mx_md3 mx_rs1
-&ame_store_tile_str mx_md2 mx_rs1 mx_rs2
-&ame_store_acc_str mx_md2 mx_rs1 mx_rs2
-&ame_store_acc_new mx_md3 mx_rs1
+&ame_settile      mx_uimm10
+&ame_settile_reg  mx_rs1
+&ame_zero         mx_md3
+&ame_load_matrix  mx_md3 mx_rs1
+&ame_store_matrix mx_md3 mx_rs1
+&ame_load_tile_str mx_td2 mx_rs1 mx_rs2
+&ame_load_acc_str  mx_ad2 mx_rs1 mx_rs2
+&ame_store_tile_str mx_td2 mx_rs1 mx_rs2
+&ame_store_acc_str mx_ad2 mx_rs1 mx_rs2
 &ame_matmul_acc    mx_ad2 mx_ms2_3 mx_ms1_3
 &ame_misc_mm       mx_md3 mx_ms1_3
 &ame_misc_rrr      mx_md3 mx_ms2_3 mx_ms1_3
@@ -49,17 +48,16 @@
 &ame_release
 
 # === Instruction formats ===
-@ame_seti_new   .... .... .... .... .... .... .... ....   &ame_settile_new   mx_uimm10=%mx_uimm10
-@ame_setr_new   .... .... .... .... .... .... .... ....   &ame_settile_reg   mx_rs1=%mx_rs1
-@ame_rel_new    .... .... .... .... .... .... .... ....   &ame_release
-@ame_zero_new   .... .... .... .... .... .... .... ....   &ame_zero_new      mx_md3=%mx_md3
-@ame_ld_t_new   .... .... .... .... .... .... .... ....   &ame_load_tile_new mx_md3=%mx_md3 mx_rs1=%mx_rs1
-@ame_ld_t_str   .... .... .... .... .... .... .... ....   &ame_load_tile_str mx_md2=%mx_md2 mx_rs1=%mx_rs1 mx_rs2=%mx_rs2
-@ame_ld_a_str   .... .... .... .... .... .... .... ....   &ame_load_acc_str  mx_md2=%mx_md2 mx_rs1=%mx_rs1 mx_rs2=%mx_rs2
-@ame_st_t_new   .... .... .... .... .... .... .... ....   &ame_store_tile_new mx_md3=%mx_md3 mx_rs1=%mx_rs1
-@ame_st_t_str   .... .... .... .... .... .... .... ....   &ame_store_tile_str mx_md2=%mx_md2 mx_rs1=%mx_rs1 mx_rs2=%mx_rs2
-@ame_st_a_str   .... .... .... .... .... .... .... ....   &ame_store_acc_str mx_md2=%mx_md2 mx_rs1=%mx_rs1 mx_rs2=%mx_rs2
-@ame_st_a_new   .... .... .... .... .... .... .... ....   &ame_store_acc_new mx_md3=%mx_md3 mx_rs1=%mx_rs1
+@ame_seti       .... .... .... .... .... .... .... ....   &ame_settile      mx_uimm10=%mx_uimm10
+@ame_setr       .... .... .... .... .... .... .... ....   &ame_settile_reg  mx_rs1=%mx_rs1
+@ame_rel        .... .... .... .... .... .... .... ....   &ame_release
+@ame_zero       .... .... .... .... .... .... .... ....   &ame_zero         mx_md3=%mx_md3
+@ame_ld_matrix  .... .... .... .... .... .... .... ....   &ame_load_matrix  mx_md3=%mx_md3 mx_rs1=%mx_rs1
+@ame_st_matrix  .... .... .... .... .... .... .... ....   &ame_store_matrix mx_md3=%mx_md3 mx_rs1=%mx_rs1
+@ame_ld_t_str   .... .... .... .... .... .... .... ....   &ame_load_tile_str mx_td2=%mx_td2 mx_rs1=%mx_rs1 mx_rs2=%mx_rs2
+@ame_ld_a_str   .... .... .... .... .... .... .... ....   &ame_load_acc_str  mx_ad2=%mx_ad2 mx_rs1=%mx_rs1 mx_rs2=%mx_rs2
+@ame_st_t_str   .... .... .... .... .... .... .... ....   &ame_store_tile_str mx_td2=%mx_td2 mx_rs1=%mx_rs1 mx_rs2=%mx_rs2
+@ame_st_a_str   .... .... .... .... .... .... .... ....   &ame_store_acc_str mx_ad2=%mx_ad2 mx_rs1=%mx_rs1 mx_rs2=%mx_rs2
 @ame_matmul_acc .... .... .... .... .... .... .... ....   &ame_matmul_acc    mx_ad2=%mx_ad2 mx_ms2_3=%mx_ms2_3 mx_ms1_3=%mx_ms1_3
 @ame_misc_mm    .... .... .... .... .... .... .... ....   &ame_misc_mm       mx_md3=%mx_md3 mx_ms1_3=%mx_ms1_3
 @ame_misc_rrr   .... .... .... .... .... .... .... ....   &ame_misc_rrr      mx_md3=%mx_md3 mx_ms2_3=%mx_ms2_3 mx_ms1_3=%mx_ms1_3
@@ -73,23 +71,23 @@
 # =====================================================================
 
 # --- Control / Config ---
-mrelease         0000 00 0 00000 00000 000 00000 0101011      @ame_rel_new
-msettileki       0001 00 0 ..... ..... 000 00000 0101011      @ame_seti_new
-msettilek        0001 00 1 00000 ..... 000 00000 0101011      @ame_setr_new
-msettilemi       0010 00 0 ..... ..... 000 00000 0101011      @ame_seti_new
-msettilem        0010 00 1 00000 ..... 000 00000 0101011      @ame_setr_new
-msettileni       0011 00 0 ..... ..... 000 00000 0101011      @ame_seti_new
-msettilen        0011 00 1 00000 ..... 000 00000 0101011      @ame_setr_new
+mrelease         0000 00 0 00000 00000 000 00000 0101011      @ame_rel
+msettileki       0001 00 0 ..... ..... 000 00000 0101011      @ame_seti
+msettilek        0001 00 1 00000 ..... 000 00000 0101011      @ame_setr
+msettilemi       0010 00 0 ..... ..... 000 00000 0101011      @ame_seti
+msettilem        0010 00 1 00000 ..... 000 00000 0101011      @ame_setr
+msettileni       0011 00 0 ..... ..... 000 00000 0101011      @ame_seti
+msettilen        0011 00 1 00000 ..... 000 00000 0101011      @ame_setr
 
 # --- Control: zero matrix registers ---
 # unified 3-bit matrix register encoding:
 #   000 tr0/tile0   001 tr1/tile1   010 tr2/tile2   011 tr3/tile3
 #   100 acc0        101 acc1        110 acc2        111 acc3
 # count encoding: 000->1, 001->2, 011->4, 111->8
-mzero            0000 11 000 000 00 000 000 00 ... 0101011    @ame_zero_new
-mzero2r          0000 11 001 000 00 000 000 00 ... 0101011    @ame_zero_new
-mzero4r          0000 11 011 000 00 000 000 00 ... 0101011    @ame_zero_new
-mzero8r          0000 11 111 000 00 000 000 00 ... 0101011    @ame_zero_new
+mzero            0000 11 000 000 00 000 000 00 ... 0101011    @ame_zero
+mzero2r          0000 11 001 000 00 000 000 00 ... 0101011    @ame_zero
+mzero4r          0000 11 011 000 00 000 000 00 ... 0101011    @ame_zero
+mzero8r          0000 11 111 000 00 000 000 00 ... 0101011    @ame_zero
 
 # --- MISC: data move ---
 mmov_mm          0001 11 000 000 00 ... 000 00 ... 0101011    @ame_misc_mm
@@ -114,6 +112,18 @@ mcslideup_h      1000 11 ... 000 01 ... 000 01 ... 0101011    @ame_misc_slide
 mcslideup_w      1000 11 ... 000 10 ... 000 10 ... 0101011    @ame_misc_slide
 
 # --- Memory: contiguous / strided load/store ---
+# Whole-matrix loads/stores first, then strided helpers in canonical family order.
+# For mlme/msme, md uses unified 3-bit encoding for whole matrix registers:
+#   md=0..3 => tile/tr0..3
+#   md=4..7 => acc0..3
+mlme8            0011 01 0 00000 ..... 000 00 ... 0101011     @ame_ld_matrix
+msme8            0011 01 1 00000 ..... 000 00 ... 0101011     @ame_st_matrix
+mlme16           0011 01 0 00000 ..... 000 01 ... 0101011     @ame_ld_matrix
+msme16           0011 01 1 00000 ..... 000 01 ... 0101011     @ame_st_matrix
+mlme32           0011 01 0 00000 ..... 000 10 ... 0101011     @ame_ld_matrix
+msme32           0011 01 1 00000 ..... 000 10 ... 0101011     @ame_st_matrix
+
+# Strided loads.
 mlae8            0000 01 0 ..... ..... 000 00 0 .. 0101011    @ame_ld_t_str
 mlae16           0000 01 0 ..... ..... 000 01 0 .. 0101011    @ame_ld_t_str
 mlae32           0000 01 0 ..... ..... 000 10 0 .. 0101011    @ame_ld_t_str
@@ -123,15 +133,6 @@ mlbe32           0001 01 0 ..... ..... 000 10 0 .. 0101011    @ame_ld_t_str
 mlce8            0010 01 0 ..... ..... 000 00 1 .. 0101011    @ame_ld_a_str
 mlce16           0010 01 0 ..... ..... 000 01 1 .. 0101011    @ame_ld_a_str
 mlce32           0010 01 0 ..... ..... 000 10 1 .. 0101011    @ame_ld_a_str
-mlate8           0100 01 0 ..... ..... 000 00 0 .. 0101011    @ame_ld_t_str
-mlate16          0100 01 0 ..... ..... 000 01 0 .. 0101011    @ame_ld_t_str
-mlate32          0100 01 0 ..... ..... 000 10 0 .. 0101011    @ame_ld_t_str
-mlbte8           0101 01 0 ..... ..... 000 00 0 .. 0101011    @ame_ld_t_str
-mlbte16          0101 01 0 ..... ..... 000 01 0 .. 0101011    @ame_ld_t_str
-mlbte32          0101 01 0 ..... ..... 000 10 0 .. 0101011    @ame_ld_t_str
-mlcte8           0110 01 0 ..... ..... 000 00 1 .. 0101011    @ame_ld_a_str
-mlcte16          0110 01 0 ..... ..... 000 01 1 .. 0101011    @ame_ld_a_str
-mlcte32          0110 01 0 ..... ..... 000 10 1 .. 0101011    @ame_ld_a_str
 msae8            0000 01 1 ..... ..... 000 00 0 .. 0101011    @ame_st_t_str
 msae16           0000 01 1 ..... ..... 000 01 0 .. 0101011    @ame_st_t_str
 msae32           0000 01 1 ..... ..... 000 10 0 .. 0101011    @ame_st_t_str
@@ -141,6 +142,17 @@ msbe32           0001 01 1 ..... ..... 000 10 0 .. 0101011    @ame_st_t_str
 msce8            0010 01 1 ..... ..... 000 00 1 .. 0101011    @ame_st_a_str
 msce16           0010 01 1 ..... ..... 000 01 1 .. 0101011    @ame_st_a_str
 msce32           0010 01 1 ..... ..... 000 10 1 .. 0101011    @ame_st_a_str
+
+# Additional stride families.
+mlate8           0100 01 0 ..... ..... 000 00 0 .. 0101011    @ame_ld_t_str
+mlate16          0100 01 0 ..... ..... 000 01 0 .. 0101011    @ame_ld_t_str
+mlate32          0100 01 0 ..... ..... 000 10 0 .. 0101011    @ame_ld_t_str
+mlbte8           0101 01 0 ..... ..... 000 00 0 .. 0101011    @ame_ld_t_str
+mlbte16          0101 01 0 ..... ..... 000 01 0 .. 0101011    @ame_ld_t_str
+mlbte32          0101 01 0 ..... ..... 000 10 0 .. 0101011    @ame_ld_t_str
+mlcte8           0110 01 0 ..... ..... 000 00 1 .. 0101011    @ame_ld_a_str
+mlcte16          0110 01 0 ..... ..... 000 01 1 .. 0101011    @ame_ld_a_str
+mlcte32          0110 01 0 ..... ..... 000 10 1 .. 0101011    @ame_ld_a_str
 msate8           0100 01 1 ..... ..... 000 00 0 .. 0101011    @ame_st_t_str
 msate16          0100 01 1 ..... ..... 000 01 0 .. 0101011    @ame_st_t_str
 msate32          0100 01 1 ..... ..... 000 10 0 .. 0101011    @ame_st_t_str
@@ -150,16 +162,6 @@ msbte32          0101 01 1 ..... ..... 000 10 0 .. 0101011    @ame_st_t_str
 mscte8           0110 01 1 ..... ..... 000 00 1 .. 0101011    @ame_st_a_str
 mscte16          0110 01 1 ..... ..... 000 01 1 .. 0101011    @ame_st_a_str
 mscte32          0110 01 1 ..... ..... 000 10 1 .. 0101011    @ame_st_a_str
-
-# For mlme16/msme16/mlme32/msme32, md uses unified 3-bit encoding:
-#   md=0..3 => tile/tr0..3
-#   md=4..7 => acc0..3
-mlme8            0011 01 0 00000 ..... 000 00 ... 0101011     @ame_ld_t_new
-msme8            0011 01 1 00000 ..... 000 00 ... 0101011     @ame_st_t_new
-mlme16           0011 01 0 00000 ..... 000 01 ... 0101011     @ame_ld_t_new
-msme16           0011 01 1 00000 ..... 000 01 ... 0101011     @ame_st_t_new
-mlme32           0011 01 0 00000 ..... 000 10 ... 0101011     @ame_st_a_new
-msme32           0011 01 1 00000 ..... 000 10 ... 0101011     @ame_st_a_new
 
 # --- Compute ---
 # matmul-family acc destination uses bit9=1 + md[1:0], which separates it from

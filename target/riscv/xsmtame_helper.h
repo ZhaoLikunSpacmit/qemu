@@ -1,92 +1,90 @@
 /* AME (Attached Matrix Extension) helper declarations */
 
-/* --- Memory: stride load --- */
-/* mlme8  td, (rs1), rs2 : load tile INT8 */
-DEF_HELPER_4(xsmtame_mlme8,  void, env, i32, tl, tl)
+/* --- Memory helpers --- */
+/* mlme8  md, (rs1) : load whole matrix register */
+DEF_HELPER_3(xsmtame_mlme8,  void, env, i32, tl)
+/* mlme16 md, (rs1) : load whole matrix register */
+DEF_HELPER_3(xsmtame_mlme16, void, env, i32, tl)
+/* mlme32 md, (rs1) : load whole matrix register */
+DEF_HELPER_3(xsmtame_mlme32, void, env, i32, tl)
+/* msme8  ms3, (rs1) : store whole matrix register */
+DEF_HELPER_3(xsmtame_msme8,  void, env, i32, tl)
+/* msme16 ms3, (rs1) : store whole matrix register */
+DEF_HELPER_3(xsmtame_msme16, void, env, i32, tl)
+/* msme32 ms3, (rs1) : store whole matrix register */
+DEF_HELPER_3(xsmtame_msme32, void, env, i32, tl)
 /* mlae8 td, (rs1), rs2 : strided load A tile INT8 */
 DEF_HELPER_4(xsmtame_mlae8,  void, env, i32, tl, tl)
-/* mlbe8 td, (rs1), rs2 : strided load B tile INT8 */
-DEF_HELPER_4(xsmtame_mlbe8,  void, env, i32, tl, tl)
-/* mlate8 td, (rs1), rs2 : strided transpose-load A tile INT8 */
-DEF_HELPER_4(xsmtame_mlate8, void, env, i32, tl, tl)
-/* mlbte8 td, (rs1), rs2 : strided transpose-load B tile INT8 */
-DEF_HELPER_4(xsmtame_mlbte8, void, env, i32, tl, tl)
+/* mlae16 md, (rs1), rs2 : strided load A tile INT16/FP16 */
+DEF_HELPER_4(xsmtame_mlae16, void, env, i32, tl, tl)
 /* mlae32 td, (rs1), rs2 : strided load A tile INT32 */
 DEF_HELPER_4(xsmtame_mlae32, void, env, i32, tl, tl)
+/* mlbe8 td, (rs1), rs2 : strided load B tile INT8 */
+DEF_HELPER_4(xsmtame_mlbe8,  void, env, i32, tl, tl)
+/* mlbe16 md, (rs1), rs2 : strided load B tile INT16/FP16 */
+DEF_HELPER_4(xsmtame_mlbe16, void, env, i32, tl, tl)
 /* mlbe32 td, (rs1), rs2 : strided load B tile INT32 */
 DEF_HELPER_4(xsmtame_mlbe32, void, env, i32, tl, tl)
-/* mlate32 td, (rs1), rs2 : strided transpose-load A tile INT32 */
-DEF_HELPER_4(xsmtame_mlate32, void, env, i32, tl, tl)
-/* mlbte32 td, (rs1), rs2 : strided transpose-load B tile INT32 */
-DEF_HELPER_4(xsmtame_mlbte32, void, env, i32, tl, tl)
 /* mlce8 ad, (rs1), rs2 : strided load C matrix INT8 into acc */
 DEF_HELPER_4(xsmtame_mlce8,  void, env, i32, tl, tl)
 /* mlce16 ad, (rs1), rs2 : strided load C matrix INT16 into acc */
 DEF_HELPER_4(xsmtame_mlce16, void, env, i32, tl, tl)
 /* mlce32 ad, (rs1), rs2 : strided load C matrix INT32/FP32 into acc */
 DEF_HELPER_4(xsmtame_mlce32, void, env, i32, tl, tl)
-/* mlcte8 ad, (rs1), rs2 : strided transpose-load C matrix INT8 into acc */
-DEF_HELPER_4(xsmtame_mlcte8,  void, env, i32, tl, tl)
-/* mlcte16 ad, (rs1), rs2 : strided transpose-load C matrix INT16 into acc */
-DEF_HELPER_4(xsmtame_mlcte16, void, env, i32, tl, tl)
-/* mlcte32 ad, (rs1), rs2 : strided transpose-load C matrix INT32/FP32 into acc */
-DEF_HELPER_4(xsmtame_mlcte32, void, env, i32, tl, tl)
-/* mlme16 md, (rs1) : contiguous load tile INT16/FP16 */
-DEF_HELPER_3(xsmtame_mlme16, void, env, i32, tl)
-/* mlae16 md, (rs1), rs2 : strided load A tile INT16/FP16 */
-DEF_HELPER_4(xsmtame_mlae16, void, env, i32, tl, tl)
-/* mlbe16 md, (rs1), rs2 : strided load B tile INT16/FP16 */
-DEF_HELPER_4(xsmtame_mlbe16, void, env, i32, tl, tl)
-/* mlate16 md, (rs1), rs2 : strided load A tile INT16/FP16 */
-DEF_HELPER_4(xsmtame_mlate16, void, env, i32, tl, tl)
-/* mlbte16 md, (rs1), rs2 : strided load B_T tile INT16/FP16 */
-DEF_HELPER_4(xsmtame_mlbte16, void, env, i32, tl, tl)
-/* mlme32 md, (rs1) : contiguous load acc INT32/FP32 */
-DEF_HELPER_3(xsmtame_mlme32, void, env, i32, tl)
-
-/* --- Memory: stride store --- */
-/* msme8  td, (rs1), rs2 : store tile INT8 */
-DEF_HELPER_4(xsmtame_msme8,  void, env, i32, tl, tl)
 /* msae8 td, (rs1), rs2 : strided store A tile INT8 */
 DEF_HELPER_4(xsmtame_msae8,  void, env, i32, tl, tl)
-/* msbe8 td, (rs1), rs2 : strided store B tile INT8 */
-DEF_HELPER_4(xsmtame_msbe8,  void, env, i32, tl, tl)
-/* msate8 td, (rs1), rs2 : strided transpose-store A tile INT8 */
-DEF_HELPER_4(xsmtame_msate8, void, env, i32, tl, tl)
-/* msbte8 td, (rs1), rs2 : strided transpose-store B tile INT8 */
-DEF_HELPER_4(xsmtame_msbte8, void, env, i32, tl, tl)
+/* msae16 td, (rs1), rs2 : strided store A tile INT16/FP16 */
+DEF_HELPER_4(xsmtame_msae16, void, env, i32, tl, tl)
 /* msae32 td, (rs1), rs2 : strided store A tile INT32 */
 DEF_HELPER_4(xsmtame_msae32, void, env, i32, tl, tl)
+/* msbe8 td, (rs1), rs2 : strided store B tile INT8 */
+DEF_HELPER_4(xsmtame_msbe8,  void, env, i32, tl, tl)
+/* msbe16 td, (rs1), rs2 : strided store B tile INT16/FP16 */
+DEF_HELPER_4(xsmtame_msbe16, void, env, i32, tl, tl)
 /* msbe32 td, (rs1), rs2 : strided store B tile INT32 */
 DEF_HELPER_4(xsmtame_msbe32, void, env, i32, tl, tl)
-/* msate32 td, (rs1), rs2 : strided transpose-store A tile INT32 */
-DEF_HELPER_4(xsmtame_msate32, void, env, i32, tl, tl)
-/* msbte32 td, (rs1), rs2 : strided transpose-store B tile INT32 */
-DEF_HELPER_4(xsmtame_msbte32, void, env, i32, tl, tl)
 /* msce8 ad, (rs1), rs2 : strided store C matrix INT8 from acc */
 DEF_HELPER_4(xsmtame_msce8,  void, env, i32, tl, tl)
 /* msce16 ad, (rs1), rs2 : strided store C matrix INT16 from acc */
 DEF_HELPER_4(xsmtame_msce16, void, env, i32, tl, tl)
 /* msce32 ad, (rs1), rs2 : strided store C matrix INT32/FP32 from acc */
 DEF_HELPER_4(xsmtame_msce32, void, env, i32, tl, tl)
+/* mlate8 td, (rs1), rs2 : strided transpose-load A tile INT8 */
+DEF_HELPER_4(xsmtame_mlate8, void, env, i32, tl, tl)
+/* mlate16 md, (rs1), rs2 : strided load A tile INT16/FP16 */
+DEF_HELPER_4(xsmtame_mlate16, void, env, i32, tl, tl)
+/* mlate32 td, (rs1), rs2 : strided transpose-load A tile INT32 */
+DEF_HELPER_4(xsmtame_mlate32, void, env, i32, tl, tl)
+/* mlbte8 td, (rs1), rs2 : strided transpose-load B tile INT8 */
+DEF_HELPER_4(xsmtame_mlbte8, void, env, i32, tl, tl)
+/* mlbte16 md, (rs1), rs2 : strided load B_T tile INT16/FP16 */
+DEF_HELPER_4(xsmtame_mlbte16, void, env, i32, tl, tl)
+/* mlbte32 td, (rs1), rs2 : strided transpose-load B tile INT32 */
+DEF_HELPER_4(xsmtame_mlbte32, void, env, i32, tl, tl)
+/* mlcte8 ad, (rs1), rs2 : strided transpose-load C matrix INT8 into acc */
+DEF_HELPER_4(xsmtame_mlcte8,  void, env, i32, tl, tl)
+/* mlcte16 ad, (rs1), rs2 : strided transpose-load C matrix INT16 into acc */
+DEF_HELPER_4(xsmtame_mlcte16, void, env, i32, tl, tl)
+/* mlcte32 ad, (rs1), rs2 : strided transpose-load C matrix INT32/FP32 into acc */
+DEF_HELPER_4(xsmtame_mlcte32, void, env, i32, tl, tl)
+/* msate8 td, (rs1), rs2 : strided transpose-store A tile INT8 */
+DEF_HELPER_4(xsmtame_msate8, void, env, i32, tl, tl)
+/* msate16 td, (rs1), rs2 : strided transpose-store A tile INT16/FP16 */
+DEF_HELPER_4(xsmtame_msate16, void, env, i32, tl, tl)
+/* msate32 td, (rs1), rs2 : strided transpose-store A tile INT32 */
+DEF_HELPER_4(xsmtame_msate32, void, env, i32, tl, tl)
+/* msbte8 td, (rs1), rs2 : strided transpose-store B tile INT8 */
+DEF_HELPER_4(xsmtame_msbte8, void, env, i32, tl, tl)
+/* msbte16 td, (rs1), rs2 : strided transpose-store B tile INT16/FP16 */
+DEF_HELPER_4(xsmtame_msbte16, void, env, i32, tl, tl)
+/* msbte32 td, (rs1), rs2 : strided transpose-store B tile INT32 */
+DEF_HELPER_4(xsmtame_msbte32, void, env, i32, tl, tl)
 /* mscte8 ad, (rs1), rs2 : strided transpose-store C matrix INT8 from acc */
 DEF_HELPER_4(xsmtame_mscte8,  void, env, i32, tl, tl)
 /* mscte16 ad, (rs1), rs2 : strided transpose-store C matrix INT16 from acc */
 DEF_HELPER_4(xsmtame_mscte16, void, env, i32, tl, tl)
 /* mscte32 ad, (rs1), rs2 : strided transpose-store C matrix INT32/FP32 from acc */
 DEF_HELPER_4(xsmtame_mscte32, void, env, i32, tl, tl)
-/* msae16 td, (rs1), rs2 : strided store A tile INT16/FP16 */
-DEF_HELPER_4(xsmtame_msae16, void, env, i32, tl, tl)
-/* msbe16 td, (rs1), rs2 : strided store B tile INT16/FP16 */
-DEF_HELPER_4(xsmtame_msbe16, void, env, i32, tl, tl)
-/* msate16 td, (rs1), rs2 : strided transpose-store A tile INT16/FP16 */
-DEF_HELPER_4(xsmtame_msate16, void, env, i32, tl, tl)
-/* msbte16 td, (rs1), rs2 : strided transpose-store B tile INT16/FP16 */
-DEF_HELPER_4(xsmtame_msbte16, void, env, i32, tl, tl)
-/* msme16 td, (rs1) : contiguous store tile INT16/FP16 */
-DEF_HELPER_3(xsmtame_msme16, void, env, i32, tl)
-/* msme32 md, (rs1) : contiguous store acc INT32/FP32 */
-DEF_HELPER_3(xsmtame_msme32, void, env, i32, tl)
 
 /* --- Compute: GEMM --- */
 /* mmaccu.w.b  ad, ts2, ts1 : UINT8 GEMM, acc[ad] += tile[ts2] * tile[ts1] */

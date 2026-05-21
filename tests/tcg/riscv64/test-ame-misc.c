@@ -405,6 +405,56 @@ static void test_mmov_scalar_widths(void)
                 "mmovw.x.m sign-extends to XLEN");
 }
 
+static void test_mlme_msme_whole_matrix(void)
+{
+    enum {
+        TILE_BYTES = 128,
+        ACC_BYTES = 4096,
+    };
+    static uint8_t tile_src[TILE_BYTES];
+    static uint8_t tile_dst[TILE_BYTES];
+    static uint8_t acc_src[ACC_BYTES];
+    static uint8_t acc_dst[ACC_BYTES];
+    int i;
+
+    for (i = 0; i < TILE_BYTES; i++) {
+        tile_src[i] = (uint8_t)(i ^ 0x5a);
+        tile_dst[i] = 0;
+    }
+    for (i = 0; i < ACC_BYTES; i++) {
+        acc_src[i] = (uint8_t)((i * 13 + 7) & 0xff);
+        acc_dst[i] = 0;
+    }
+
+    clear_all();
+    {
+        register unsigned long a0 __asm__("a0") = (unsigned long)tile_src;
+        __asm__ volatile (".4byte %0" :: "i"(MLME32(REG_TILE0, 10)), "r"(a0) : "memory");
+    }
+    {
+        register unsigned long a0 __asm__("a0") = (unsigned long)tile_dst;
+        __asm__ volatile (".4byte %0" :: "i"(MSME16(REG_TILE0, 10)), "r"(a0) : "memory");
+    }
+    for (i = 0; i < TILE_BYTES; i++) {
+        TEST_ASSERT(tile_dst[i] == tile_src[i],
+                    "mlme/msme whole transfer works for tile registers");
+    }
+
+    clear_all();
+    {
+        register unsigned long a0 __asm__("a0") = (unsigned long)acc_src;
+        __asm__ volatile (".4byte %0" :: "i"(MLME8(REG_ACC0, 10)), "r"(a0) : "memory");
+    }
+    {
+        register unsigned long a0 __asm__("a0") = (unsigned long)acc_dst;
+        __asm__ volatile (".4byte %0" :: "i"(MSME8(REG_ACC0, 10)), "r"(a0) : "memory");
+    }
+    for (i = 0; i < ACC_BYTES; i++) {
+        TEST_ASSERT(acc_dst[i] == acc_src[i],
+                    "mlme/msme whole transfer works for accumulator registers");
+    }
+}
+
 static void test_sfu_fp32_tile_ops(void)
 {
     clear_all();
@@ -572,6 +622,7 @@ int main(void)
 
     test_mmov_cross_class_undisturbed();
     test_mmov_scalar_widths();
+    test_mlme_msme_whole_matrix();
     test_sfu_fp32_tile_ops();
     test_mpack_tile();
     test_mrslide_tile();
