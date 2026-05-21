@@ -92,6 +92,43 @@ static inline uint8_t mmovb_load(unsigned reg, unsigned long idx)
     }
 }
 
+static inline unsigned long mmovb_load_raw(unsigned reg, unsigned long idx)
+{
+    switch (reg) {
+    case 0: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVB_X_M(12, 0, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    case 1: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVB_X_M(12, 1, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    case 2: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVB_X_M(12, 2, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    case 4: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVB_X_M(12, 4, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    default:
+        TEST_ASSERT(0, "unsupported mmovb raw load register");
+        return 0;
+    }
+}
+
 static inline void mmovh_store(unsigned reg, unsigned long idx,
                                unsigned long value)
 {
@@ -142,6 +179,36 @@ static inline uint16_t mmovh_load(unsigned reg, unsigned long idx)
     }
     default:
         TEST_ASSERT(0, "unsupported mmovh load register");
+        return 0;
+    }
+}
+
+static inline unsigned long mmovh_load_raw(unsigned reg, unsigned long idx)
+{
+    switch (reg) {
+    case 0: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVH_X_M(12, 0, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    case 1: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVH_X_M(12, 1, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    case 4: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVH_X_M(12, 4, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    default:
+        TEST_ASSERT(0, "unsupported mmovh raw load register");
         return 0;
     }
 }
@@ -200,6 +267,36 @@ static inline uint32_t mmovw_load(unsigned reg, unsigned long idx)
     }
 }
 
+static inline unsigned long mmovw_load_raw(unsigned reg, unsigned long idx)
+{
+    switch (reg) {
+    case 0: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVW_X_M(12, 0, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    case 1: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVW_X_M(12, 1, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    case 4: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVW_X_M(12, 4, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    default:
+        TEST_ASSERT(0, "unsupported mmovw raw load register");
+        return 0;
+    }
+}
+
 static inline void mmovd_store(unsigned reg, unsigned long idx,
                                unsigned long value)
 {
@@ -240,27 +337,38 @@ static void clear_all(void)
 
 static void test_mmov_cross_class_undisturbed(void)
 {
-    int i;
+    int row;
+    int col;
 
     clear_all();
-    for (i = 0; i < 160; i++) {
-        mmovb_store(REG_ACC0, i, 0xaa);
+    for (row = 0; row < 32; row++) {
+        for (col = 0; col < 128; col++) {
+            mmovb_store(REG_ACC0, row * 128 + col, 0xaa);
+        }
     }
-    for (i = 0; i < 128; i++) {
-        mmovb_store(REG_TILE0, i, (uint8_t)(i ^ 0x5a));
+    for (row = 0; row < 32; row++) {
+        for (col = 0; col < 4; col++) {
+            mmovb_store(REG_TILE0, row * 4 + col,
+                        (uint8_t)(((row * 4 + col) ^ 0x5a) & 0xff));
+        }
     }
 
     AME_INSN(MMOV_MM(REG_ACC0, REG_TILE0));
 
-    for (i = 0; i < 128; i++) {
-        uint8_t got = mmovb_load(REG_ACC0, i);
-        TEST_ASSERT(got == (uint8_t)(i ^ 0x5a),
-                    "mmov.mm tile->acc copied source bytes");
-    }
-    for (i = 128; i < 160; i++) {
-        uint8_t got = mmovb_load(REG_ACC0, i);
-        TEST_ASSERT(got == 0xaa,
-                    "mmov.mm tile->acc kept acc tail undisturbed");
+    for (row = 0; row < 32; row++) {
+        for (col = 0; col < 4; col++) {
+            uint8_t got = mmovb_load(REG_ACC0, row * 128 + col);
+            uint8_t expect = (uint8_t)(((row * 4 + col) ^ 0x5a) & 0xff);
+
+            TEST_ASSERT(got == expect,
+                        "mmov.mm tile->acc copied source row prefix");
+        }
+        for (col = 4; col < 128; col++) {
+            uint8_t got = mmovb_load(REG_ACC0, row * 128 + col);
+
+            TEST_ASSERT(got == 0xaa,
+                        "mmov.mm tile->acc kept remaining acc row bytes undisturbed");
+        }
     }
 }
 
@@ -283,6 +391,18 @@ static void test_mmov_scalar_widths(void)
     mmovd_store(REG_ACC0, 1, 0x1122334455667788ull);
     TEST_ASSERT(mmovd_load(REG_ACC0, 1) == 0x1122334455667788ull,
                 "mmovd.m.x / mmovd.x.m roundtrip");
+
+    mmovb_store(REG_TILE0, 7, 0xfeu);
+    TEST_ASSERT((long)mmovb_load_raw(REG_TILE0, 7) == -2L,
+                "mmovb.x.m sign-extends to XLEN");
+
+    mmovh_store(REG_TILE0, 9, 0xff80u);
+    TEST_ASSERT((long)mmovh_load_raw(REG_TILE0, 9) == -128L,
+                "mmovh.x.m sign-extends to XLEN");
+
+    mmovw_store(REG_ACC0, 11, 0x80000001u);
+    TEST_ASSERT((long)mmovw_load_raw(REG_ACC0, 11) == -2147483647L,
+                "mmovw.x.m sign-extends to XLEN");
 }
 
 static void test_sfu_fp32_tile_ops(void)

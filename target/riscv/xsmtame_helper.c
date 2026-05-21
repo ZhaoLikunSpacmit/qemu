@@ -1636,13 +1636,26 @@ void HELPER(xsmtame_mmov_mm)(CPURISCVState *env, uint32_t md,
     size_t src_size;
     uint8_t *dst = xsmtame_matrix_ptr(env, md, &dst_size);
     uint8_t *src = xsmtame_matrix_ptr(env, ms1, &src_size);
-    size_t copy_size = MIN(dst_size, src_size);
 
     if (dst == src) {
         return;
     }
 
-    memmove(dst, src, copy_size);
+    {
+        size_t dst_row_bytes = xsmtame_matrix_row_bytes(env, md);
+        size_t src_row_bytes = xsmtame_matrix_row_bytes(env, ms1);
+        size_t copy_bytes = MIN(dst_row_bytes, src_row_bytes);
+        size_t dst_rows = dst_row_bytes ? dst_size / dst_row_bytes : 0;
+        size_t src_rows = src_row_bytes ? src_size / src_row_bytes : 0;
+        size_t rows = MIN(dst_rows, src_rows);
+        size_t row;
+
+        for (row = 0; row < rows; row++) {
+            memmove(dst + row * dst_row_bytes,
+                    src + row * src_row_bytes,
+                    copy_bytes);
+        }
+    }
 }
 
 target_ulong HELPER(xsmtame_mmovb_x_m)(CPURISCVState *env, uint32_t ms2,
@@ -1652,7 +1665,7 @@ target_ulong HELPER(xsmtame_mmovb_x_m)(CPURISCVState *env, uint32_t ms2,
     uint8_t *src = xsmtame_matrix_ptr(env, ms2, &reg_size);
     size_t offset = xsmtame_mmov_elem_offset(reg_size, 1, idx);
 
-    return src[offset];
+    return (target_ulong)(target_long)(int8_t)src[offset];
 }
 
 target_ulong HELPER(xsmtame_mmovh_x_m)(CPURISCVState *env, uint32_t ms2,
@@ -1662,7 +1675,7 @@ target_ulong HELPER(xsmtame_mmovh_x_m)(CPURISCVState *env, uint32_t ms2,
     uint8_t *src = xsmtame_matrix_ptr(env, ms2, &reg_size);
     size_t offset = xsmtame_mmov_elem_offset(reg_size, 2, idx);
 
-    return lduw_le_p(src + offset);
+    return (target_ulong)(target_long)(int16_t)lduw_le_p(src + offset);
 }
 
 target_ulong HELPER(xsmtame_mmovw_x_m)(CPURISCVState *env, uint32_t ms2,
@@ -1672,7 +1685,7 @@ target_ulong HELPER(xsmtame_mmovw_x_m)(CPURISCVState *env, uint32_t ms2,
     uint8_t *src = xsmtame_matrix_ptr(env, ms2, &reg_size);
     size_t offset = xsmtame_mmov_elem_offset(reg_size, 4, idx);
 
-    return ldl_le_p(src + offset);
+    return (target_ulong)(target_long)(int32_t)ldl_le_p(src + offset);
 }
 
 target_ulong HELPER(xsmtame_mmovd_x_m)(CPURISCVState *env, uint32_t ms2,
