@@ -547,6 +547,8 @@ struct CPUArchState {
     target_ulong mtilem;
     target_ulong mtilen;
     target_ulong mtilek;
+    target_ulong xmsat;
+    target_ulong xmsaten;
 };
 
 /*

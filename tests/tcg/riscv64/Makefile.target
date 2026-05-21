@@ -21,3 +21,6 @@ run-test-fcvtmod: QEMU_OPTS += -cpu rv64,d=true,zfa=true
 
 TESTS += test-ame-misc
 run-test-ame-misc: QEMU_OPTS += -cpu rv64,xsmtame=true,xsmtame-version=0.6
+
+TESTS += test-ame-mmacc
+run-test-ame-mmacc: QEMU_OPTS += -cpu rv64,xsmtame=true,xsmtame-version=0.6

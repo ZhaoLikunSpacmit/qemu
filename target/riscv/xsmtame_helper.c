@@ -655,23 +655,45 @@ GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_mscte32, uint32_t, ad,
  * ──────────────────────────────────────────
  *
  * INT8 → INT32 GEMM  (mmacc.w.b):
- *   acc[ad][m][n] += Σ_{k} (int32)tile_A[ts2][m][k] * (int32)tile_B_T[ts1][n][k]
+ *   acc[ad][m][n] += Σ_{k} (int32)tile_A[ms1][m][k] * (int32)tile_B_T[ms2][n][k]
  *
- * tile_B is stored transposed: shape [N][K], so tile_B_T[n][k] is natural.
+ * tile_B is stored transposed: shape [N][K], so tile_B_T[ms2][n][k] is natural.
  *
  * FP16 → FP32 GEMM  (mfmacc.s.h):
  *   mfmacc.s.h md, ms2, ms1
  *   acc[md][m][n] += Σ_{k} fp32(A[ms1][m][k]) * fp32(B_T[ms2][n][k])
  */
 
+static inline int32_t xsmtame_acc_add_i32(CPURISCVState *env,
+                                          int32_t acc,
+                                          int32_t sum)
+{
+    int64_t wide = (int64_t)acc + (int64_t)sum;
+
+    if (!(env->xmsaten & 0x1)) {
+        return (int32_t)wide;
+    }
+
+    if (wide > INT32_MAX) {
+        env->xmsat = 1;
+        return INT32_MAX;
+    }
+    if (wide < INT32_MIN) {
+        env->xmsat = 1;
+        return INT32_MIN;
+    }
+
+    return (int32_t)wide;
+}
+
 static void xsmtame_mmacc_w_b_common(CPURISCVState *env, uint32_t ad,
-                                          uint32_t ts2, uint32_t ts1,
-                                          bool lhs_unsigned,
-                                          bool rhs_unsigned)
+                                     uint32_t ms2, uint32_t ms1,
+                                     bool ms1_unsigned,
+                                     bool ms2_unsigned)
 {
     AMEShapeInfo shape = xsmtame_shape(env);
-    const uint8_t *tA = (const uint8_t *)xsmtame_tile8s_ptr(env, ts2);
-    const uint8_t *tBT = (const uint8_t *)xsmtame_tile8s_ptr(env, ts1);
+    const uint8_t *tA = (const uint8_t *)xsmtame_tile8s_ptr(env, ms1);
+    const uint8_t *tBT = (const uint8_t *)xsmtame_tile8s_ptr(env, ms2);
     int32_t *acc = (int32_t *)xsmtame_acc32_ptr(env, ad);
     uint32_t m, n, k;
 
@@ -681,12 +703,14 @@ static void xsmtame_mmacc_w_b_common(CPURISCVState *env, uint32_t ad,
             for (k = 0; k < shape.k; k++) {
                 uint32_t a_raw = tA[m * shape.k + k];
                 uint32_t b_raw = tBT[n * shape.k + k];
-                int32_t a = lhs_unsigned ? (int32_t)a_raw : (int32_t)(int8_t)a_raw;
-                int32_t b = rhs_unsigned ? (int32_t)b_raw : (int32_t)(int8_t)b_raw;
+                int32_t a = ms1_unsigned ? (int32_t)a_raw : (int32_t)(int8_t)a_raw;
+                int32_t b = ms2_unsigned ? (int32_t)b_raw : (int32_t)(int8_t)b_raw;
 
                 sum += a * b;
             }
-            acc[m * shape.n + n] += sum;
+            acc[m * shape.n + n] = xsmtame_acc_add_i32(env,
+                                                       acc[m * shape.n + n],
+                                                       sum);
         }
     }
 }

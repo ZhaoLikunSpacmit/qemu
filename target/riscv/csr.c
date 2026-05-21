@@ -1391,6 +1391,34 @@ static RISCVException read_mtilem(CPURISCVState *env, int csrno,
     return RISCV_EXCP_NONE;
 }
 
+static RISCVException read_xmsat(CPURISCVState *env, int csrno,
+                                 target_ulong *val)
+{
+    *val = env->xmsat & 0x1;
+    return RISCV_EXCP_NONE;
+}
+
+static RISCVException write_xmsat(CPURISCVState *env, int csrno,
+                                  target_ulong val, uintptr_t ra)
+{
+    env->xmsat = val & 0x1;
+    return RISCV_EXCP_NONE;
+}
+
+static RISCVException read_xmsaten(CPURISCVState *env, int csrno,
+                                   target_ulong *val)
+{
+    *val = env->xmsaten & 0x1;
+    return RISCV_EXCP_NONE;
+}
+
+static RISCVException write_xmsaten(CPURISCVState *env, int csrno,
+                                    target_ulong val, uintptr_t ra)
+{
+    env->xmsaten = val & 0x1;
+    return RISCV_EXCP_NONE;
+}
+
 static RISCVException write_mtilem(CPURISCVState *env, int csrno,
                                    target_ulong val, uintptr_t ra)
 {
@@ -6738,8 +6766,10 @@ riscv_csr_operations csr_ops[CSR_TABLE_SIZE] = {
                              write_mhpmcounterh                         },
     [CSR_SCOUNTOVF]      = { "scountovf", sscofpmf,  read_scountovf,
                              .min_priv_ver = PRIV_VERSION_1_12_0 },
+    [CSR_XMSAT]          = { "xmsat",     xsmtame,  read_xmsat, write_xmsat },
     [CSR_MTILEM]         = { "mtilem",    xsmtame,  read_mtilem, write_mtilem },
     [CSR_MTILEN]         = { "mtilen",    xsmtame,  read_mtilen, write_mtilen },
     [CSR_MTILEK]         = { "mtilek",    xsmtame,  read_mtilek, write_mtilek },
+    [CSR_XMSATEN]        = { "xmsaten",   xsmtame,  read_xmsaten, write_xmsaten },
 #endif /* !CONFIG_USER_ONLY */
 };

@@ -609,7 +609,7 @@ GEN_XSMTAME_WHOLE_STORE_TRANS(trans_msme32, arg_ame_store_matrix,
  *  GEMM
  * ──────────────────────────────────────────
  *
- * mmacc.w.b  ad, ts2, ts1 : acc[ad] += tile[ts2] * tile[ts1]^T (INT8→INT32)
+ * mmacc.w.b  ad, ms2, ms1 : acc[ad] += A(ms1) * B_T(ms2) (INT8→INT32)
  * mfmacc.s.h md, ms2, ms1 : acc[md] += A(ms1) * B_T(ms2) (FP16→FP32)
  *
  * Since acc = 4096B exceeds TCG gvec maxsz, we use direct helper calls

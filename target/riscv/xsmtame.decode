@@ -180,7 +180,7 @@ mfmacc_s_e5      0000 01 000 ... 00 ... 000 10 1 .. 0101011    @ame_matmul_acc
 mfmacc_s_e4      0000 01 001 ... 00 ... 000 10 1 .. 0101011    @ame_matmul_acc
 mfmacc_s_h       0000 01 000 ... 01 ... 000 10 1 .. 0101011    @ame_matmul_acc
 mfmacc_s_bf16    0000 01 001 ... 01 ... 000 10 1 .. 0101011    @ame_matmul_acc
-# mmacc.w.b ad, ms2, ms1 : INT8->INT32 GEMM, acc[ad] += A(tile[ms2]) * B_T(tile[ms1])
+# mmacc.w.b ad, ms2, ms1 : INT8->INT32 GEMM, acc[ad] += A(tile[ms1]) * B_T(tile[ms2])
 mmaccu_w_b       0001 01 000 ... 00 ... 000 10 1 .. 0101011    @ame_matmul_acc
 mmaccus_w_b      0001 01 001 ... 00 ... 000 10 1 .. 0101011    @ame_matmul_acc
 mmaccsu_w_b      0001 01 010 ... 00 ... 000 10 1 .. 0101011    @ame_matmul_acc
