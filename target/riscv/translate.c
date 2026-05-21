@@ -1232,8 +1232,10 @@ static uint32_t opcode_at(DisasContextBase *dcbase, target_ulong pc)
 #include "decode-xthead.c.inc"
 #include "insn_trans/trans_xthead.c.inc"
 #include "insn_trans/trans_xventanacondops.c.inc"
-#include "decode-ame_ext.c.inc"
-#include "insn_trans/trans_ame_ext.c.inc"
+#include "decode-xsmtame.c.inc"
+#include "decode-xsmtsfu.c.inc"
+#include "insn_trans/trans_xsmtame.c.inc"
+#include "insn_trans/trans_xsmtsfu.c.inc"
 
 /* Include the auto-generated decoder for 16 bit insn */
 #include "decode-insn16.c.inc"
@@ -1251,7 +1253,8 @@ const RISCVDecoder decoder_table[] = {
     { always_true_p, decode_insn32 },
     { has_xthead_p, decode_xthead},
     { has_XVentanaCondOps_p, decode_XVentanaCodeOps},
-    { has_xsmtame_p, decode_xsmtame_ext},
+    { has_xsmtame_p, decode_xsmtame},
+    { has_xsmtame_p, decode_xsmtsfu},
 };
 
 const size_t decoder_table_size = ARRAY_SIZE(decoder_table);

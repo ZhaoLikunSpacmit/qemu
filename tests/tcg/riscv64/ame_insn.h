@@ -47,6 +47,11 @@
      (((uint32_t)(ms1) & 0x7u) << 15) | (((uint32_t)(size) & 0x3u) << 10) | \
      (((uint32_t)(md) & 0x7u) << 7) | AME_OP)
 
+#define AME_SFU_ENC(funct3, vd, vs2) \
+    (((uint32_t)0x13 << 26) | (((uint32_t)(vs2) & 0x1fu) << 20) | \
+     ((uint32_t)0x7 << 15) | (((uint32_t)(funct3) & 0x7u) << 12) | \
+     (((uint32_t)(vd) & 0x1fu) << 7) | AME_OP)
+
 #define MZERO8R(md) AME_ZERO_ENC(0x7, md)
 
 #define MMOV_MM(md, ms1) AME_MISC_MM_ENC(0x1, 0x0, md, 0, ms1)
@@ -71,6 +76,11 @@
 #define MCSLIDEUP_B(md, ms1, imm3) AME_MISC_SLIDE_ENC(0x8, 0x0, md, ms1, imm3)
 #define MCSLIDEUP_H(md, ms1, imm3) AME_MISC_SLIDE_ENC(0x8, 0x1, md, ms1, imm3)
 #define MCSLIDEUP_W(md, ms1, imm3) AME_MISC_SLIDE_ENC(0x8, 0x2, md, ms1, imm3)
+
+#define VFEX2_V(vd, vs2) AME_SFU_ENC(0x1, vd, vs2)
+#define VFTANH_V(vd, vs2) AME_SFU_ENC(0x2, vd, vs2)
+#define VFLG2_V(vd, vs2) AME_SFU_ENC(0x3, vd, vs2)
+#define VFRCP_V(vd, vs2) AME_SFU_ENC(0x4, vd, vs2)
 
 static int test_pass_count;
 static int test_fail_count;

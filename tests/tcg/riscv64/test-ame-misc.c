@@ -285,6 +285,37 @@ static void test_mmov_scalar_widths(void)
                 "mmovd.m.x / mmovd.x.m roundtrip");
 }
 
+static void test_sfu_fp32_tile_ops(void)
+{
+    clear_all();
+
+    mmovw_store(REG_TILE0, 0, 0x00000000u); /* +0.0 */
+    mmovw_store(REG_TILE0, 1, 0x3f800000u); /* +1.0 */
+    mmovw_store(REG_TILE0, 2, 0x40000000u); /* +2.0 */
+
+    AME_INSN(VFEX2_V(REG_TILE1, REG_TILE0));
+    TEST_ASSERT(mmovw_load(REG_TILE1, 0) == 0x3f800000u,
+                "vfex2.v 2^0 == 1");
+    TEST_ASSERT(mmovw_load(REG_TILE1, 1) == 0x40000000u,
+                "vfex2.v 2^1 == 2");
+
+    AME_INSN(VFTANH_V(REG_TILE1, REG_TILE0));
+    TEST_ASSERT(mmovw_load(REG_TILE1, 0) == 0x00000000u,
+                "vftanh.v tanh(0) == 0");
+
+    AME_INSN(VFLG2_V(REG_TILE1, REG_TILE0));
+    TEST_ASSERT(mmovw_load(REG_TILE1, 1) == 0x00000000u,
+                "vflg2.v log2(1) == 0");
+    TEST_ASSERT(mmovw_load(REG_TILE1, 2) == 0x3f800000u,
+                "vflg2.v log2(2) == 1");
+
+    AME_INSN(VFRCP_V(REG_TILE1, REG_TILE0));
+    TEST_ASSERT(mmovw_load(REG_TILE1, 1) == 0x3f800000u,
+                "vfrcp.v 1/1 == 1");
+    TEST_ASSERT(mmovw_load(REG_TILE1, 2) == 0x3f000000u,
+                "vfrcp.v 1/2 == 0.5");
+}
+
 static void init_tile_rows_for_pack(void)
 {
     static const uint8_t tile0[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
@@ -421,6 +452,7 @@ int main(void)
 
     test_mmov_cross_class_undisturbed();
     test_mmov_scalar_widths();
+    test_sfu_fp32_tile_ops();
     test_mpack_tile();
     test_mrslide_tile();
     test_mcslide_tile();
