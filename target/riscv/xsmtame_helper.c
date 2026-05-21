@@ -1768,20 +1768,24 @@ static void xsmtame_mrslide_common(CPURISCVState *env, uint32_t md,
     size_t rows = reg_size / row_bytes;
     size_t row;
 
+    if (rows != 0) {
+        amount &= rows - 1;
+    }
+
     memset(tmp, 0, reg_size);
     for (row = 0; row < rows; row++) {
         size_t src_row;
 
         if (up) {
-            src_row = row + amount;
-            if (src_row >= rows) {
-                continue;
-            }
-        } else {
             if (row < amount) {
                 continue;
             }
             src_row = row - amount;
+        } else {
+            src_row = row + amount;
+            if (src_row >= rows) {
+                continue;
+            }
         }
 
         memcpy(tmp + row * row_bytes, src + src_row * row_bytes, row_bytes);
@@ -1804,21 +1808,25 @@ static void xsmtame_mcslide_common(CPURISCVState *env, uint32_t md,
     size_t row;
     size_t col;
 
+    if (cols != 0) {
+        amount &= cols - 1;
+    }
+
     memset(tmp, 0, reg_size);
     for (row = 0; row < rows; row++) {
         for (col = 0; col < cols; col++) {
             size_t src_col;
 
             if (up) {
-                src_col = col + amount;
-                if (src_col >= cols) {
-                    continue;
-                }
-            } else {
                 if (col < amount) {
                     continue;
                 }
                 src_col = col - amount;
+            } else {
+                src_col = col + amount;
+                if (src_col >= cols) {
+                    continue;
+                }
             }
 
             memcpy(tmp + row * row_bytes + col * elem_size,

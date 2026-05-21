@@ -495,29 +495,29 @@ static void test_mrslide_tile(void)
 {
     init_tile_rows_for_row_slide();
     AME_INSN(MRSLIDEDOWN(REG_TILE1, REG_TILE0, 1));
+    TEST_ASSERT(mmovb_load(REG_TILE1, 0) == 5 &&
+                mmovb_load(REG_TILE1, 1) == 6 &&
+                mmovb_load(REG_TILE1, 2) == 7 &&
+                mmovb_load(REG_TILE1, 3) == 8,
+                "mrslidedown moves src row i+imm3 into dst row i");
+    TEST_ASSERT(mmovb_load(REG_TILE1, 12) == 0 &&
+                mmovb_load(REG_TILE1, 13) == 0 &&
+                mmovb_load(REG_TILE1, 14) == 0 &&
+                mmovb_load(REG_TILE1, 15) == 0,
+                "mrslidedown zero-fills bottom rows");
+
+    init_tile_rows_for_row_slide();
+    AME_INSN(MRSLIDEUP(REG_TILE1, REG_TILE0, 2));
     TEST_ASSERT(mmovb_load(REG_TILE1, 0) == 0 &&
                 mmovb_load(REG_TILE1, 1) == 0 &&
                 mmovb_load(REG_TILE1, 2) == 0 &&
                 mmovb_load(REG_TILE1, 3) == 0,
-                "mrslidedown zero-fills top row");
-    TEST_ASSERT(mmovb_load(REG_TILE1, 4) == 1 &&
-                mmovb_load(REG_TILE1, 5) == 2 &&
-                mmovb_load(REG_TILE1, 6) == 3 &&
-                mmovb_load(REG_TILE1, 7) == 4,
-                "mrslidedown shifts row data down");
-
-    init_tile_rows_for_row_slide();
-    AME_INSN(MRSLIDEUP(REG_TILE1, REG_TILE0, 2));
-    TEST_ASSERT(mmovb_load(REG_TILE1, 0) == 9 &&
-                mmovb_load(REG_TILE1, 1) == 10 &&
-                mmovb_load(REG_TILE1, 2) == 11 &&
-                mmovb_load(REG_TILE1, 3) == 12,
-                "mrslideup shifts row data up");
-    TEST_ASSERT(mmovb_load(REG_TILE1, 8) == 0 &&
-                mmovb_load(REG_TILE1, 9) == 0 &&
-                mmovb_load(REG_TILE1, 10) == 0 &&
-                mmovb_load(REG_TILE1, 11) == 0,
-                "mrslideup zero-fills bottom rows");
+                "mrslideup zero-fills top rows");
+    TEST_ASSERT(mmovb_load(REG_TILE1, 8) == 1 &&
+                mmovb_load(REG_TILE1, 9) == 2 &&
+                mmovb_load(REG_TILE1, 10) == 3 &&
+                mmovb_load(REG_TILE1, 11) == 4,
+                "mrslideup moves src row i-imm3 into dst row i");
 }
 
 static void test_mcslide_tile(void)
@@ -529,41 +529,41 @@ static void test_mcslide_tile(void)
     mmovb_store(REG_TILE0, 3, 4);
 
     AME_INSN(MCSLIDEDOWN_B(REG_TILE1, REG_TILE0, 1));
-    TEST_ASSERT(mmovb_load(REG_TILE1, 0) == 0 &&
-                mmovb_load(REG_TILE1, 1) == 1 &&
-                mmovb_load(REG_TILE1, 2) == 2 &&
-                mmovb_load(REG_TILE1, 3) == 3,
-                "mcslidedown.b shifts columns toward higher indices");
-
-    AME_INSN(MCSLIDEUP_B(REG_TILE1, REG_TILE0, 1));
     TEST_ASSERT(mmovb_load(REG_TILE1, 0) == 2 &&
                 mmovb_load(REG_TILE1, 1) == 3 &&
                 mmovb_load(REG_TILE1, 2) == 4 &&
                 mmovb_load(REG_TILE1, 3) == 0,
-                "mcslideup.b shifts columns toward lower indices");
+                "mcslidedown.b moves src col i+imm3 into dst col i");
+
+    AME_INSN(MCSLIDEUP_B(REG_TILE1, REG_TILE0, 1));
+    TEST_ASSERT(mmovb_load(REG_TILE1, 0) == 0 &&
+                mmovb_load(REG_TILE1, 1) == 1 &&
+                mmovb_load(REG_TILE1, 2) == 2 &&
+                mmovb_load(REG_TILE1, 3) == 3,
+                "mcslideup.b moves src col i-imm3 into dst col i");
 
     clear_all();
     mmovh_store(REG_TILE0, 0, 0x1111);
     mmovh_store(REG_TILE0, 1, 0x2222);
     AME_INSN(MCSLIDEDOWN_H(REG_TILE1, REG_TILE0, 1));
-    TEST_ASSERT(mmovh_load(REG_TILE1, 0) == 0 &&
-                mmovh_load(REG_TILE1, 1) == 0x1111,
+    TEST_ASSERT(mmovh_load(REG_TILE1, 0) == 0x2222 &&
+                mmovh_load(REG_TILE1, 1) == 0,
                 "mcslidedown.h shifts halfword columns");
 
     AME_INSN(MCSLIDEUP_H(REG_TILE1, REG_TILE0, 1));
-    TEST_ASSERT(mmovh_load(REG_TILE1, 0) == 0x2222 &&
-                mmovh_load(REG_TILE1, 1) == 0,
+    TEST_ASSERT(mmovh_load(REG_TILE1, 0) == 0 &&
+                mmovh_load(REG_TILE1, 1) == 0x1111,
                 "mcslideup.h shifts halfword columns");
 
     clear_all();
     mmovw_store(REG_TILE0, 0, 0xdeadbeefu);
     AME_INSN(MCSLIDEDOWN_W(REG_TILE1, REG_TILE0, 1));
-    TEST_ASSERT(mmovw_load(REG_TILE1, 0) == 0,
-                "mcslidedown.w zero-fills single-column tile rows");
+    TEST_ASSERT(mmovw_load(REG_TILE1, 0) == 0xdeadbeefu,
+                "mcslidedown.w masks imm3 when there is one column");
 
     AME_INSN(MCSLIDEUP_W(REG_TILE1, REG_TILE0, 1));
-    TEST_ASSERT(mmovw_load(REG_TILE1, 0) == 0,
-                "mcslideup.w zero-fills single-column tile rows");
+    TEST_ASSERT(mmovw_load(REG_TILE1, 0) == 0xdeadbeefu,
+                "mcslideup.w masks imm3 when there is one column");
 }
 
 int main(void)
