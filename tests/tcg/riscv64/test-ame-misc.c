@@ -92,6 +92,43 @@ static inline uint8_t mmovb_load(unsigned reg, unsigned long idx)
     }
 }
 
+static inline unsigned long mmovb_load_raw(unsigned reg, unsigned long idx)
+{
+    switch (reg) {
+    case 0: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVB_X_M(12, 0, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    case 1: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVB_X_M(12, 1, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    case 2: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVB_X_M(12, 2, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    case 4: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVB_X_M(12, 4, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    default:
+        TEST_ASSERT(0, "unsupported mmovb raw load register");
+        return 0;
+    }
+}
+
 static inline void mmovh_store(unsigned reg, unsigned long idx,
                                unsigned long value)
 {
@@ -142,6 +179,36 @@ static inline uint16_t mmovh_load(unsigned reg, unsigned long idx)
     }
     default:
         TEST_ASSERT(0, "unsupported mmovh load register");
+        return 0;
+    }
+}
+
+static inline unsigned long mmovh_load_raw(unsigned reg, unsigned long idx)
+{
+    switch (reg) {
+    case 0: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVH_X_M(12, 0, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    case 1: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVH_X_M(12, 1, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    case 4: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVH_X_M(12, 4, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    default:
+        TEST_ASSERT(0, "unsupported mmovh raw load register");
         return 0;
     }
 }
@@ -200,6 +267,36 @@ static inline uint32_t mmovw_load(unsigned reg, unsigned long idx)
     }
 }
 
+static inline unsigned long mmovw_load_raw(unsigned reg, unsigned long idx)
+{
+    switch (reg) {
+    case 0: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVW_X_M(12, 0, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    case 1: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVW_X_M(12, 1, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    case 4: {
+        register unsigned long a0 __asm__("a0") = idx;
+        register unsigned long a2 __asm__("a2");
+        __asm__ volatile (".4byte %1" : "=r"(a2) :
+                          "i"(MMOVW_X_M(12, 4, 10)), "r"(a0) : "memory");
+        return a2;
+    }
+    default:
+        TEST_ASSERT(0, "unsupported mmovw raw load register");
+        return 0;
+    }
+}
+
 static inline void mmovd_store(unsigned reg, unsigned long idx,
                                unsigned long value)
 {
@@ -240,27 +337,38 @@ static void clear_all(void)
 
 static void test_mmov_cross_class_undisturbed(void)
 {
-    int i;
+    int row;
+    int col;
 
     clear_all();
-    for (i = 0; i < 160; i++) {
-        mmovb_store(REG_ACC0, i, 0xaa);
+    for (row = 0; row < 32; row++) {
+        for (col = 0; col < 128; col++) {
+            mmovb_store(REG_ACC0, row * 128 + col, 0xaa);
+        }
     }
-    for (i = 0; i < 128; i++) {
-        mmovb_store(REG_TILE0, i, (uint8_t)(i ^ 0x5a));
+    for (row = 0; row < 32; row++) {
+        for (col = 0; col < 4; col++) {
+            mmovb_store(REG_TILE0, row * 4 + col,
+                        (uint8_t)(((row * 4 + col) ^ 0x5a) & 0xff));
+        }
     }
 
     AME_INSN(MMOV_MM(REG_ACC0, REG_TILE0));
 
-    for (i = 0; i < 128; i++) {
-        uint8_t got = mmovb_load(REG_ACC0, i);
-        TEST_ASSERT(got == (uint8_t)(i ^ 0x5a),
-                    "mmov.mm tile->acc copied source bytes");
-    }
-    for (i = 128; i < 160; i++) {
-        uint8_t got = mmovb_load(REG_ACC0, i);
-        TEST_ASSERT(got == 0xaa,
-                    "mmov.mm tile->acc kept acc tail undisturbed");
+    for (row = 0; row < 32; row++) {
+        for (col = 0; col < 4; col++) {
+            uint8_t got = mmovb_load(REG_ACC0, row * 128 + col);
+            uint8_t expect = (uint8_t)(((row * 4 + col) ^ 0x5a) & 0xff);
+
+            TEST_ASSERT(got == expect,
+                        "mmov.mm tile->acc copied source row prefix");
+        }
+        for (col = 4; col < 128; col++) {
+            uint8_t got = mmovb_load(REG_ACC0, row * 128 + col);
+
+            TEST_ASSERT(got == 0xaa,
+                        "mmov.mm tile->acc kept remaining acc row bytes undisturbed");
+        }
     }
 }
 
@@ -283,6 +391,99 @@ static void test_mmov_scalar_widths(void)
     mmovd_store(REG_ACC0, 1, 0x1122334455667788ull);
     TEST_ASSERT(mmovd_load(REG_ACC0, 1) == 0x1122334455667788ull,
                 "mmovd.m.x / mmovd.x.m roundtrip");
+
+    mmovb_store(REG_TILE0, 7, 0xfeu);
+    TEST_ASSERT((long)mmovb_load_raw(REG_TILE0, 7) == -2L,
+                "mmovb.x.m sign-extends to XLEN");
+
+    mmovh_store(REG_TILE0, 9, 0xff80u);
+    TEST_ASSERT((long)mmovh_load_raw(REG_TILE0, 9) == -128L,
+                "mmovh.x.m sign-extends to XLEN");
+
+    mmovw_store(REG_ACC0, 11, 0x80000001u);
+    TEST_ASSERT((long)mmovw_load_raw(REG_ACC0, 11) == -2147483647L,
+                "mmovw.x.m sign-extends to XLEN");
+}
+
+static void test_mlme_msme_whole_matrix(void)
+{
+    enum {
+        TILE_BYTES = 128,
+        ACC_BYTES = 4096,
+    };
+    static uint8_t tile_src[TILE_BYTES];
+    static uint8_t tile_dst[TILE_BYTES];
+    static uint8_t acc_src[ACC_BYTES];
+    static uint8_t acc_dst[ACC_BYTES];
+    int i;
+
+    for (i = 0; i < TILE_BYTES; i++) {
+        tile_src[i] = (uint8_t)(i ^ 0x5a);
+        tile_dst[i] = 0;
+    }
+    for (i = 0; i < ACC_BYTES; i++) {
+        acc_src[i] = (uint8_t)((i * 13 + 7) & 0xff);
+        acc_dst[i] = 0;
+    }
+
+    clear_all();
+    {
+        register unsigned long a0 __asm__("a0") = (unsigned long)tile_src;
+        __asm__ volatile (".4byte %0" :: "i"(MLME32(REG_TILE0, 10)), "r"(a0) : "memory");
+    }
+    {
+        register unsigned long a0 __asm__("a0") = (unsigned long)tile_dst;
+        __asm__ volatile (".4byte %0" :: "i"(MSME16(REG_TILE0, 10)), "r"(a0) : "memory");
+    }
+    for (i = 0; i < TILE_BYTES; i++) {
+        TEST_ASSERT(tile_dst[i] == tile_src[i],
+                    "mlme/msme whole transfer works for tile registers");
+    }
+
+    clear_all();
+    {
+        register unsigned long a0 __asm__("a0") = (unsigned long)acc_src;
+        __asm__ volatile (".4byte %0" :: "i"(MLME8(REG_ACC0, 10)), "r"(a0) : "memory");
+    }
+    {
+        register unsigned long a0 __asm__("a0") = (unsigned long)acc_dst;
+        __asm__ volatile (".4byte %0" :: "i"(MSME8(REG_ACC0, 10)), "r"(a0) : "memory");
+    }
+    for (i = 0; i < ACC_BYTES; i++) {
+        TEST_ASSERT(acc_dst[i] == acc_src[i],
+                    "mlme/msme whole transfer works for accumulator registers");
+    }
+}
+
+static void test_sfu_fp32_tile_ops(void)
+{
+    clear_all();
+
+    mmovw_store(REG_TILE0, 0, 0x00000000u); /* +0.0 */
+    mmovw_store(REG_TILE0, 1, 0x3f800000u); /* +1.0 */
+    mmovw_store(REG_TILE0, 2, 0x40000000u); /* +2.0 */
+
+    AME_INSN(VFEX2_V(REG_TILE1, REG_TILE0));
+    TEST_ASSERT(mmovw_load(REG_TILE1, 0) == 0x3f800000u,
+                "vfex2.v 2^0 == 1");
+    TEST_ASSERT(mmovw_load(REG_TILE1, 1) == 0x40000000u,
+                "vfex2.v 2^1 == 2");
+
+    AME_INSN(VFTANH_V(REG_TILE1, REG_TILE0));
+    TEST_ASSERT(mmovw_load(REG_TILE1, 0) == 0x00000000u,
+                "vftanh.v tanh(0) == 0");
+
+    AME_INSN(VFLG2_V(REG_TILE1, REG_TILE0));
+    TEST_ASSERT(mmovw_load(REG_TILE1, 1) == 0x00000000u,
+                "vflg2.v log2(1) == 0");
+    TEST_ASSERT(mmovw_load(REG_TILE1, 2) == 0x3f800000u,
+                "vflg2.v log2(2) == 1");
+
+    AME_INSN(VFRCP_V(REG_TILE1, REG_TILE0));
+    TEST_ASSERT(mmovw_load(REG_TILE1, 1) == 0x3f800000u,
+                "vfrcp.v 1/1 == 1");
+    TEST_ASSERT(mmovw_load(REG_TILE1, 2) == 0x3f000000u,
+                "vfrcp.v 1/2 == 0.5");
 }
 
 static void init_tile_rows_for_pack(void)
@@ -344,29 +545,29 @@ static void test_mrslide_tile(void)
 {
     init_tile_rows_for_row_slide();
     AME_INSN(MRSLIDEDOWN(REG_TILE1, REG_TILE0, 1));
+    TEST_ASSERT(mmovb_load(REG_TILE1, 0) == 5 &&
+                mmovb_load(REG_TILE1, 1) == 6 &&
+                mmovb_load(REG_TILE1, 2) == 7 &&
+                mmovb_load(REG_TILE1, 3) == 8,
+                "mrslidedown moves src row i+imm3 into dst row i");
+    TEST_ASSERT(mmovb_load(REG_TILE1, 12) == 0 &&
+                mmovb_load(REG_TILE1, 13) == 0 &&
+                mmovb_load(REG_TILE1, 14) == 0 &&
+                mmovb_load(REG_TILE1, 15) == 0,
+                "mrslidedown zero-fills bottom rows");
+
+    init_tile_rows_for_row_slide();
+    AME_INSN(MRSLIDEUP(REG_TILE1, REG_TILE0, 2));
     TEST_ASSERT(mmovb_load(REG_TILE1, 0) == 0 &&
                 mmovb_load(REG_TILE1, 1) == 0 &&
                 mmovb_load(REG_TILE1, 2) == 0 &&
                 mmovb_load(REG_TILE1, 3) == 0,
-                "mrslidedown zero-fills top row");
-    TEST_ASSERT(mmovb_load(REG_TILE1, 4) == 1 &&
-                mmovb_load(REG_TILE1, 5) == 2 &&
-                mmovb_load(REG_TILE1, 6) == 3 &&
-                mmovb_load(REG_TILE1, 7) == 4,
-                "mrslidedown shifts row data down");
-
-    init_tile_rows_for_row_slide();
-    AME_INSN(MRSLIDEUP(REG_TILE1, REG_TILE0, 2));
-    TEST_ASSERT(mmovb_load(REG_TILE1, 0) == 9 &&
-                mmovb_load(REG_TILE1, 1) == 10 &&
-                mmovb_load(REG_TILE1, 2) == 11 &&
-                mmovb_load(REG_TILE1, 3) == 12,
-                "mrslideup shifts row data up");
-    TEST_ASSERT(mmovb_load(REG_TILE1, 8) == 0 &&
-                mmovb_load(REG_TILE1, 9) == 0 &&
-                mmovb_load(REG_TILE1, 10) == 0 &&
-                mmovb_load(REG_TILE1, 11) == 0,
-                "mrslideup zero-fills bottom rows");
+                "mrslideup zero-fills top rows");
+    TEST_ASSERT(mmovb_load(REG_TILE1, 8) == 1 &&
+                mmovb_load(REG_TILE1, 9) == 2 &&
+                mmovb_load(REG_TILE1, 10) == 3 &&
+                mmovb_load(REG_TILE1, 11) == 4,
+                "mrslideup moves src row i-imm3 into dst row i");
 }
 
 static void test_mcslide_tile(void)
@@ -378,41 +579,41 @@ static void test_mcslide_tile(void)
     mmovb_store(REG_TILE0, 3, 4);
 
     AME_INSN(MCSLIDEDOWN_B(REG_TILE1, REG_TILE0, 1));
-    TEST_ASSERT(mmovb_load(REG_TILE1, 0) == 0 &&
-                mmovb_load(REG_TILE1, 1) == 1 &&
-                mmovb_load(REG_TILE1, 2) == 2 &&
-                mmovb_load(REG_TILE1, 3) == 3,
-                "mcslidedown.b shifts columns toward higher indices");
-
-    AME_INSN(MCSLIDEUP_B(REG_TILE1, REG_TILE0, 1));
     TEST_ASSERT(mmovb_load(REG_TILE1, 0) == 2 &&
                 mmovb_load(REG_TILE1, 1) == 3 &&
                 mmovb_load(REG_TILE1, 2) == 4 &&
                 mmovb_load(REG_TILE1, 3) == 0,
-                "mcslideup.b shifts columns toward lower indices");
+                "mcslidedown.b moves src col i+imm3 into dst col i");
+
+    AME_INSN(MCSLIDEUP_B(REG_TILE1, REG_TILE0, 1));
+    TEST_ASSERT(mmovb_load(REG_TILE1, 0) == 0 &&
+                mmovb_load(REG_TILE1, 1) == 1 &&
+                mmovb_load(REG_TILE1, 2) == 2 &&
+                mmovb_load(REG_TILE1, 3) == 3,
+                "mcslideup.b moves src col i-imm3 into dst col i");
 
     clear_all();
     mmovh_store(REG_TILE0, 0, 0x1111);
     mmovh_store(REG_TILE0, 1, 0x2222);
     AME_INSN(MCSLIDEDOWN_H(REG_TILE1, REG_TILE0, 1));
-    TEST_ASSERT(mmovh_load(REG_TILE1, 0) == 0 &&
-                mmovh_load(REG_TILE1, 1) == 0x1111,
+    TEST_ASSERT(mmovh_load(REG_TILE1, 0) == 0x2222 &&
+                mmovh_load(REG_TILE1, 1) == 0,
                 "mcslidedown.h shifts halfword columns");
 
     AME_INSN(MCSLIDEUP_H(REG_TILE1, REG_TILE0, 1));
-    TEST_ASSERT(mmovh_load(REG_TILE1, 0) == 0x2222 &&
-                mmovh_load(REG_TILE1, 1) == 0,
+    TEST_ASSERT(mmovh_load(REG_TILE1, 0) == 0 &&
+                mmovh_load(REG_TILE1, 1) == 0x1111,
                 "mcslideup.h shifts halfword columns");
 
     clear_all();
     mmovw_store(REG_TILE0, 0, 0xdeadbeefu);
     AME_INSN(MCSLIDEDOWN_W(REG_TILE1, REG_TILE0, 1));
-    TEST_ASSERT(mmovw_load(REG_TILE1, 0) == 0,
-                "mcslidedown.w zero-fills single-column tile rows");
+    TEST_ASSERT(mmovw_load(REG_TILE1, 0) == 0xdeadbeefu,
+                "mcslidedown.w masks imm3 when there is one column");
 
     AME_INSN(MCSLIDEUP_W(REG_TILE1, REG_TILE0, 1));
-    TEST_ASSERT(mmovw_load(REG_TILE1, 0) == 0,
-                "mcslideup.w zero-fills single-column tile rows");
+    TEST_ASSERT(mmovw_load(REG_TILE1, 0) == 0xdeadbeefu,
+                "mcslideup.w masks imm3 when there is one column");
 }
 
 int main(void)
@@ -421,6 +622,8 @@ int main(void)
 
     test_mmov_cross_class_undisturbed();
     test_mmov_scalar_widths();
+    test_mlme_msme_whole_matrix();
+    test_sfu_fp32_tile_ops();
     test_mpack_tile();
     test_mrslide_tile();
     test_mcslide_tile();

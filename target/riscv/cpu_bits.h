@@ -608,9 +608,12 @@
 #define CSR_JVT             0x017
 
 /* AME (Attached Matrix Extension) CSR addresses */
+#define CSR_XMCSR           0x802
 #define CSR_MTILEM          0x803
 #define CSR_MTILEN          0x804
 #define CSR_MTILEK          0x805
+#define CSR_XMSAT           0x807
+#define CSR_XMSATEN         0x80a
 /* mstatus CSR bits */
 #define MSTATUS_UIE         0x00000001
 #define MSTATUS_SIE         0x00000002

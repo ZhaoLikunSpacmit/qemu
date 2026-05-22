@@ -1,0 +1,25 @@
+#
+# RISC-V XSmtsfu instruction encodings
+#
+# Opcode: custom-1 = 0101011 (0x2b)
+#
+# SFU instructions use vector-like md/ms2 fields in the encoding, but the
+# AME acceptance requirements constrain both operands to tile registers tr0..tr3.
+# The translator rejects any md/ms2 value outside 0..3.
+
+# === Field extractions ===
+%xsmtsfu_md5     7:5          # destination tile register field md[4:0]
+%xsmtsfu_ms2_5   20:5         # source tile register field ms2[4:0]
+%xsmtsfu_ctrl    25:1         # mask bit, decoded for completeness
+
+# === Argument sets ===
+&xsmtsfu_unary   xsmtsfu_md5 xsmtsfu_ms2_5 xsmtsfu_ctrl
+
+# === Instruction formats ===
+@xsmtsfu_unary   .... .... .... .... .... .... .... ....   &xsmtsfu_unary xsmtsfu_md5=%xsmtsfu_md5 xsmtsfu_ms2_5=%xsmtsfu_ms2_5 xsmtsfu_ctrl=%xsmtsfu_ctrl
+
+# === SFU: fp32 tile elementwise operations ===
+mfex2_s          0100 11 . ..... 00111 001 ..... 0101011      @xsmtsfu_unary
+mftanh_s         0100 11 . ..... 00111 010 ..... 0101011      @xsmtsfu_unary
+mflg2_s          0100 11 . ..... 00111 011 ..... 0101011      @xsmtsfu_unary
+mfrcp_s          0100 11 . ..... 00111 100 ..... 0101011      @xsmtsfu_unary

@@ -58,6 +58,11 @@ typedef struct AMEShapeInfo {
     uint32_t k;
 } AMEShapeInfo;
 
+typedef struct AMEMatrixLayout {
+    size_t row_bytes;
+    size_t cols;
+} AMEMatrixLayout;
+
 static G_NORETURN void xsmtame_raise_illegal(CPURISCVState *env)
 {
     riscv_raise_exception(env, RISCV_EXCP_ILLEGAL_INST, GETPC());
@@ -144,6 +149,82 @@ static inline uint8_t *xsmtame_matrix_ptr(CPURISCVState *env, uint32_t reg,
     return xsmtame_acc_ptr(env, reg - AME_NR_TILES);
 }
 
+static inline void xsmtame_load_bytes(CPURISCVState *env, uint8_t *dst,
+                                           target_ulong addr, size_t size)
+{
+    size_t i;
+
+    for (i = 0; i < size; i++) {
+        dst[i] = cpu_ldub_data(env, addr + i);
+    }
+}
+
+static inline void xsmtame_store_bytes(CPURISCVState *env, target_ulong addr,
+                                            const uint8_t *src, size_t size)
+{
+    size_t i;
+
+    for (i = 0; i < size; i++) {
+        cpu_stb_data(env, addr + i, src[i]);
+    }
+}
+
+static inline void xsmtame_load_matrix_full(CPURISCVState *env, uint32_t md,
+                                                 target_ulong addr)
+{
+    size_t reg_size;
+    uint8_t *dst = xsmtame_matrix_ptr(env, md, &reg_size);
+
+    xsmtame_load_bytes(env, dst, addr, reg_size);
+}
+
+static inline void xsmtame_store_matrix_full(CPURISCVState *env, uint32_t ms,
+                                                  target_ulong addr)
+{
+    size_t reg_size;
+    const uint8_t *src = xsmtame_matrix_ptr(env, ms, &reg_size);
+
+    xsmtame_store_bytes(env, addr, src, reg_size);
+}
+
+#define GEN_XSMTAME_WHOLE_LOAD_HELPER(NAME)                                 \
+    void HELPER(NAME)(CPURISCVState *env, uint32_t md, target_ulong addr)   \
+    {                                                                       \
+        xsmtame_load_matrix_full(env, md, addr);                            \
+    }
+
+#define GEN_XSMTAME_WHOLE_STORE_HELPER(NAME)                                \
+    void HELPER(NAME)(CPURISCVState *env, uint32_t ms, target_ulong addr)   \
+    {                                                                       \
+        xsmtame_store_matrix_full(env, ms, addr);                           \
+    }
+
+#define GEN_XSMTAME_STRIDE_LOAD_HELPER(NAME, ELEM_TYPE, REGVAR, PTR_FN,     \
+                                       LOAD_FN, ROW_EXPR, COL_EXPR,         \
+                                       TRANSPOSE)                           \
+    void HELPER(NAME)(CPURISCVState *env, uint32_t REGVAR,                  \
+                      target_ulong addr, target_ulong stride)               \
+    {                                                                       \
+        AMEShapeInfo shape = xsmtame_shape(env);                            \
+        ELEM_TYPE *data = PTR_FN(env, REGVAR);                              \
+                                                                            \
+        LOAD_FN(data, env, REGVAR, addr, stride,                            \
+                ROW_EXPR, COL_EXPR, TRANSPOSE);                             \
+    }
+
+#define GEN_XSMTAME_STRIDE_STORE_HELPER(NAME, ELEM_TYPE, REGVAR, PTR_FN,    \
+                                        STORE_FN, ROW_EXPR, COL_EXPR,       \
+                                        TRANSPOSE)                          \
+    void HELPER(NAME)(CPURISCVState *env, uint32_t REGVAR,                  \
+                      target_ulong addr, target_ulong stride)               \
+    {                                                                       \
+        AMEShapeInfo shape = xsmtame_shape(env);                            \
+        const ELEM_TYPE *data = PTR_FN(env, REGVAR);                        \
+                                                                            \
+        STORE_FN(data, env, REGVAR, addr, stride,                           \
+                 ROW_EXPR, COL_EXPR, TRANSPOSE);                            \
+    }
+
 static inline size_t xsmtame_mmov_elem_offset(size_t reg_size,
                                                    size_t elem_size,
                                                    target_ulong idx)
@@ -154,23 +235,101 @@ static inline size_t xsmtame_mmov_elem_offset(size_t reg_size,
     return elem_idx * elem_size;
 }
 
-static inline size_t xsmtame_matrix_row_bytes(CPURISCVState *env,
-                                                   uint32_t reg)
+static inline AMEMatrixLayout xsmtame_matrix_layout(CPURISCVState *env,
+                                                    uint32_t reg,
+                                                    size_t elem_size)
 {
-    /* tile row = TRLEN/8 bytes; acc row = (ELEN/8)*ROWNUM bytes */
-    return reg < AME_NR_TILES ?
-           ame_env_trlenb(env) :
-           ame_env_acc_len_b(env) / ame_env_rownum(env);
+    size_t row_bytes = reg < AME_NR_TILES ?
+                       ame_env_trlenb(env) :
+                       ame_env_acc_len_b(env) / ame_env_rownum(env);
+    size_t cols = 0;
+
+    if (elem_size != 0) {
+        g_assert(row_bytes % elem_size == 0);
+        cols = row_bytes / elem_size;
+    }
+
+    return (AMEMatrixLayout) {
+        .row_bytes = row_bytes,
+        .cols = cols,
+    };
 }
 
-static inline size_t xsmtame_matrix_col_count(CPURISCVState *env,
-                                                   uint32_t reg,
-                                                   size_t elem_size)
+static inline bool xsmtame_matrix_is_same_class(uint32_t lhs, uint32_t rhs)
 {
-    size_t row_bytes = xsmtame_matrix_row_bytes(env, reg);
+    return (lhs < AME_NR_TILES) == (rhs < AME_NR_TILES);
+}
 
+static inline size_t xsmtame_matrix_size(CPURISCVState *env, uint32_t reg)
+{
+    return reg < AME_NR_TILES ? ame_env_tlenb(env) : ame_env_acc_len_b(env);
+}
+
+static inline void xsmtame_validate_same_matrix_class(CPURISCVState *env,
+                                                      uint32_t lhs,
+                                                      uint32_t rhs)
+{
+    if (!xsmtame_matrix_is_same_class(lhs, rhs)) {
+        xsmtame_raise_illegal(env);
+    }
+}
+
+static inline void xsmtame_validate_same_matrix_len(CPURISCVState *env,
+                                                    uint32_t lhs,
+                                                    uint32_t rhs)
+{
+    if (xsmtame_matrix_size(env, lhs) != xsmtame_matrix_size(env, rhs)) {
+        xsmtame_raise_illegal(env);
+    }
+}
+
+static inline void xsmtame_validate_same_matrix_row_layout(CPURISCVState *env,
+                                                           uint32_t lhs,
+                                                           uint32_t rhs)
+{
+    if (xsmtame_matrix_layout(env, lhs, 0).row_bytes !=
+        xsmtame_matrix_layout(env, rhs, 0).row_bytes) {
+        xsmtame_raise_illegal(env);
+    }
+}
+
+static inline void xsmtame_validate_same_matrix_layout(CPURISCVState *env,
+                                                       uint32_t lhs,
+                                                       uint32_t rhs)
+{
+    xsmtame_validate_same_matrix_class(env, lhs, rhs);
+    xsmtame_validate_same_matrix_len(env, lhs, rhs);
+    xsmtame_validate_same_matrix_row_layout(env, lhs, rhs);
+}
+
+static void xsmtame_zero_acc_inactive_region(CPURISCVState *env,
+                                             uint32_t ad,
+                                             size_t elem_size)
+{
+    AMEShapeInfo shape = xsmtame_shape(env);
+    size_t reg_size = ame_env_acc_len_b(env);
+    uint8_t *acc = xsmtame_acc_ptr(env, ad);
+    size_t row_bytes = reg_size / ame_env_rownum(env);
+    size_t rows = row_bytes ? reg_size / row_bytes : 0;
+    size_t cols;
+    size_t row;
+
+    g_assert(ad < AME_NR_ACCS);
+    g_assert(elem_size != 0);
     g_assert(row_bytes % elem_size == 0);
-    return row_bytes / elem_size;
+
+    cols = row_bytes / elem_size;
+
+    for (row = 0; row < rows; row++) {
+        uint8_t *row_ptr = acc + row * row_bytes;
+
+        if (row >= shape.m) {
+            memset(row_ptr, 0, row_bytes);
+        } else if (shape.n < cols) {
+            memset(row_ptr + shape.n * elem_size, 0,
+                   (cols - shape.n) * elem_size);
+        }
+    }
 }
 
 static void xsmtame_mmov_m_x_common(CPURISCVState *env, uint32_t md,
@@ -201,18 +360,20 @@ static void xsmtame_mmov_m_x_common(CPURISCVState *env, uint32_t md,
 }
 
 static inline void xsmtame_load_tile8_stride(uint8_t *tile,
-                                                  CPURISCVState *env,
-                                                  target_ulong addr,
-                                                  target_ulong stride,
-                                                  uint32_t rows,
-                                                  uint32_t cols,
-                                                  bool transpose)
+                                             CPURISCVState *env,
+                                             uint32_t reg,
+                                             target_ulong addr,
+                                             target_ulong stride,
+                                             uint32_t rows,
+                                             uint32_t cols,
+                                             bool transpose)
 {
+    size_t row_bytes = xsmtame_matrix_layout(env, reg, 0).row_bytes;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
         for (col = 0; col < cols; col++) {
-            tile[row * cols + col] =
+            tile[row * row_bytes + col] =
                 cpu_ldub_data(env, addr + (transpose ?
                               col * stride + row :
                               row * stride + col));
@@ -221,13 +382,15 @@ static inline void xsmtame_load_tile8_stride(uint8_t *tile,
 }
 
 static inline void xsmtame_store_tile8_stride(const uint8_t *tile,
-                                                   CPURISCVState *env,
-                                                   target_ulong addr,
-                                                   target_ulong stride,
-                                                   uint32_t rows,
-                                                   uint32_t cols,
-                                                   bool transpose)
+                                              CPURISCVState *env,
+                                              uint32_t reg,
+                                              target_ulong addr,
+                                              target_ulong stride,
+                                              uint32_t rows,
+                                              uint32_t cols,
+                                              bool transpose)
 {
+    size_t row_bytes = xsmtame_matrix_layout(env, reg, 0).row_bytes;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -235,24 +398,26 @@ static inline void xsmtame_store_tile8_stride(const uint8_t *tile,
             cpu_stb_data(env, addr + (transpose ?
                          col * stride + row :
                          row * stride + col),
-                         tile[row * cols + col]);
+                         tile[row * row_bytes + col]);
         }
     }
 }
 
 static inline void xsmtame_load_tile16_stride(uint16_t *tile16,
-                                                   CPURISCVState *env,
-                                                   target_ulong addr,
-                                                   target_ulong stride,
-                                                   uint32_t rows,
-                                                   uint32_t cols,
-                                                   bool transpose)
+                                              CPURISCVState *env,
+                                              uint32_t reg,
+                                              target_ulong addr,
+                                              target_ulong stride,
+                                              uint32_t rows,
+                                              uint32_t cols,
+                                              bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_layout(env, reg, sizeof(*tile16)).cols;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
         for (col = 0; col < cols; col++) {
-            tile16[row * cols + col] =
+            tile16[row * cols_per_row + col] =
                 cpu_lduw_data(env, addr + (transpose ?
                               col * stride + row * sizeof(*tile16) :
                               row * stride + col * sizeof(*tile16)));
@@ -261,13 +426,15 @@ static inline void xsmtame_load_tile16_stride(uint16_t *tile16,
 }
 
 static inline void xsmtame_store_tile16_stride(const uint16_t *tile16,
-                                                    CPURISCVState *env,
-                                                    target_ulong addr,
-                                                    target_ulong stride,
-                                                    uint32_t rows,
-                                                    uint32_t cols,
-                                                    bool transpose)
+                                               CPURISCVState *env,
+                                               uint32_t reg,
+                                               target_ulong addr,
+                                               target_ulong stride,
+                                               uint32_t rows,
+                                               uint32_t cols,
+                                               bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_layout(env, reg, sizeof(*tile16)).cols;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -275,24 +442,26 @@ static inline void xsmtame_store_tile16_stride(const uint16_t *tile16,
             cpu_stw_data(env, addr + (transpose ?
                          col * stride + row * sizeof(*tile16) :
                          row * stride + col * sizeof(*tile16)),
-                         tile16[row * cols + col]);
+                         tile16[row * cols_per_row + col]);
         }
     }
 }
 
 static inline void xsmtame_load_tile32_stride(uint32_t *tile32,
-                                                   CPURISCVState *env,
-                                                   target_ulong addr,
-                                                   target_ulong stride,
-                                                   uint32_t rows,
-                                                   uint32_t cols,
-                                                   bool transpose)
+                                              CPURISCVState *env,
+                                              uint32_t reg,
+                                              target_ulong addr,
+                                              target_ulong stride,
+                                              uint32_t rows,
+                                              uint32_t cols,
+                                              bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_layout(env, reg, sizeof(*tile32)).cols;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
         for (col = 0; col < cols; col++) {
-            tile32[row * cols + col] =
+            tile32[row * cols_per_row + col] =
                 cpu_ldl_data(env, addr + (transpose ?
                              col * stride + row * sizeof(*tile32) :
                              row * stride + col * sizeof(*tile32)));
@@ -301,13 +470,15 @@ static inline void xsmtame_load_tile32_stride(uint32_t *tile32,
 }
 
 static inline void xsmtame_store_tile32_stride(const uint32_t *tile32,
-                                                    CPURISCVState *env,
-                                                    target_ulong addr,
-                                                    target_ulong stride,
-                                                    uint32_t rows,
-                                                    uint32_t cols,
-                                                    bool transpose)
+                                               CPURISCVState *env,
+                                               uint32_t reg,
+                                               target_ulong addr,
+                                               target_ulong stride,
+                                               uint32_t rows,
+                                               uint32_t cols,
+                                               bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_layout(env, reg, sizeof(*tile32)).cols;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -315,24 +486,26 @@ static inline void xsmtame_store_tile32_stride(const uint32_t *tile32,
             cpu_stl_data(env, addr + (transpose ?
                          col * stride + row * sizeof(*tile32) :
                          row * stride + col * sizeof(*tile32)),
-                         tile32[row * cols + col]);
+                         tile32[row * cols_per_row + col]);
         }
     }
 }
 
 static inline void xsmtame_load_acc8_stride(uint8_t *acc8,
-                                                 CPURISCVState *env,
-                                                 target_ulong addr,
-                                                 target_ulong stride,
-                                                 uint32_t rows,
-                                                 uint32_t cols,
-                                                 bool transpose)
+                                            CPURISCVState *env,
+                                            uint32_t reg,
+                                            target_ulong addr,
+                                            target_ulong stride,
+                                            uint32_t rows,
+                                            uint32_t cols,
+                                            bool transpose)
 {
+    size_t row_bytes = xsmtame_matrix_layout(env, reg, 0).row_bytes;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
         for (col = 0; col < cols; col++) {
-            acc8[row * cols + col] =
+            acc8[row * row_bytes + col] =
                 cpu_ldub_data(env, addr + (transpose ?
                               col * stride + row :
                               row * stride + col));
@@ -341,13 +514,15 @@ static inline void xsmtame_load_acc8_stride(uint8_t *acc8,
 }
 
 static inline void xsmtame_store_acc8_stride(const uint8_t *acc8,
-                                                  CPURISCVState *env,
-                                                  target_ulong addr,
-                                                  target_ulong stride,
-                                                  uint32_t rows,
-                                                  uint32_t cols,
-                                                  bool transpose)
+                                             CPURISCVState *env,
+                                             uint32_t reg,
+                                             target_ulong addr,
+                                             target_ulong stride,
+                                             uint32_t rows,
+                                             uint32_t cols,
+                                             bool transpose)
 {
+    size_t row_bytes = xsmtame_matrix_layout(env, reg, 0).row_bytes;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -355,24 +530,26 @@ static inline void xsmtame_store_acc8_stride(const uint8_t *acc8,
             cpu_stb_data(env, addr + (transpose ?
                          col * stride + row :
                          row * stride + col),
-                         acc8[row * cols + col]);
+                         acc8[row * row_bytes + col]);
         }
     }
 }
 
 static inline void xsmtame_load_acc16_stride(uint16_t *acc16,
-                                                  CPURISCVState *env,
-                                                  target_ulong addr,
-                                                  target_ulong stride,
-                                                  uint32_t rows,
-                                                  uint32_t cols,
-                                                  bool transpose)
+                                             CPURISCVState *env,
+                                             uint32_t reg,
+                                             target_ulong addr,
+                                             target_ulong stride,
+                                             uint32_t rows,
+                                             uint32_t cols,
+                                             bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_layout(env, reg, sizeof(*acc16)).cols;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
         for (col = 0; col < cols; col++) {
-            acc16[row * cols + col] =
+            acc16[row * cols_per_row + col] =
                 cpu_lduw_data(env, addr + (transpose ?
                               col * stride + row * sizeof(*acc16) :
                               row * stride + col * sizeof(*acc16)));
@@ -381,13 +558,15 @@ static inline void xsmtame_load_acc16_stride(uint16_t *acc16,
 }
 
 static inline void xsmtame_store_acc16_stride(const uint16_t *acc16,
-                                                   CPURISCVState *env,
-                                                   target_ulong addr,
-                                                   target_ulong stride,
-                                                   uint32_t rows,
-                                                   uint32_t cols,
-                                                   bool transpose)
+                                              CPURISCVState *env,
+                                              uint32_t reg,
+                                              target_ulong addr,
+                                              target_ulong stride,
+                                              uint32_t rows,
+                                              uint32_t cols,
+                                              bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_layout(env, reg, sizeof(*acc16)).cols;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -395,24 +574,26 @@ static inline void xsmtame_store_acc16_stride(const uint16_t *acc16,
             cpu_stw_data(env, addr + (transpose ?
                          col * stride + row * sizeof(*acc16) :
                          row * stride + col * sizeof(*acc16)),
-                         acc16[row * cols + col]);
+                         acc16[row * cols_per_row + col]);
         }
     }
 }
 
 static inline void xsmtame_load_acc32_stride(uint32_t *acc32,
-                                                  CPURISCVState *env,
-                                                  target_ulong addr,
-                                                  target_ulong stride,
-                                                  uint32_t rows,
-                                                  uint32_t cols,
-                                                  bool transpose)
+                                             CPURISCVState *env,
+                                             uint32_t reg,
+                                             target_ulong addr,
+                                             target_ulong stride,
+                                             uint32_t rows,
+                                             uint32_t cols,
+                                             bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_layout(env, reg, sizeof(*acc32)).cols;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
         for (col = 0; col < cols; col++) {
-            acc32[row * cols + col] =
+            acc32[row * cols_per_row + col] =
                 cpu_ldl_data(env, addr + (transpose ?
                               col * stride + row * sizeof(*acc32) :
                               row * stride + col * sizeof(*acc32)));
@@ -421,13 +602,15 @@ static inline void xsmtame_load_acc32_stride(uint32_t *acc32,
 }
 
 static inline void xsmtame_store_acc32_stride(const uint32_t *acc32,
-                                                   CPURISCVState *env,
-                                                   target_ulong addr,
-                                                   target_ulong stride,
-                                                   uint32_t rows,
-                                                   uint32_t cols,
-                                                   bool transpose)
+                                              CPURISCVState *env,
+                                              uint32_t reg,
+                                              target_ulong addr,
+                                              target_ulong stride,
+                                              uint32_t rows,
+                                              uint32_t cols,
+                                              bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_layout(env, reg, sizeof(*acc32)).cols;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -435,453 +618,145 @@ static inline void xsmtame_store_acc32_stride(const uint32_t *acc32,
             cpu_stl_data(env, addr + (transpose ?
                          col * stride + row * sizeof(*acc32) :
                          row * stride + col * sizeof(*acc32)),
-                         acc32[row * cols + col]);
+                         acc32[row * cols_per_row + col]);
         }
     }
 }
 
 /*
  * ──────────────────────────────────────────
- *  Load helpers
+ *  Whole matrix load/store helpers
  * ──────────────────────────────────────────
- *
- * Legacy helpers still support stride where required by old instructions.
- * mlme16/mlme32/msme16/msme32 are contiguous.
- * mlae16/mlbe16 use explicit stride without transpose.
- * mlate16/mlbte16 use explicit stride and transpose while loading.
- * msae16/msbe16 use explicit stride without transpose while storing.
- * msate16/msbte16 use explicit stride and transpose while storing.
  */
 
-void HELPER(xsmtame_mlme8)(CPURISCVState *env, uint32_t td,
-                       target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint8_t *tile = xsmtame_tile_ptr(env, td);
+GEN_XSMTAME_WHOLE_LOAD_HELPER(xsmtame_mlme8)
+GEN_XSMTAME_WHOLE_LOAD_HELPER(xsmtame_mlme16)
+GEN_XSMTAME_WHOLE_LOAD_HELPER(xsmtame_mlme32)
 
-    xsmtame_load_tile8_stride(tile, env, addr, stride,
-                                   shape.m, shape.k, false);
-}
-
-void HELPER(xsmtame_mlae8)(CPURISCVState *env, uint32_t td,
-                       target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint8_t *tile = xsmtame_tile_ptr(env, td);
-
-    xsmtame_load_tile8_stride(tile, env, addr, stride,
-                                   shape.m, shape.k, false);
-}
-
-void HELPER(xsmtame_mlbe8)(CPURISCVState *env, uint32_t td,
-                       target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint8_t *tile = xsmtame_tile_ptr(env, td);
-
-    xsmtame_load_tile8_stride(tile, env, addr, stride,
-                                   shape.n, shape.k, false);
-}
-
-void HELPER(xsmtame_mlate8)(CPURISCVState *env, uint32_t td,
-                       target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint8_t *tile = xsmtame_tile_ptr(env, td);
-
-    xsmtame_load_tile8_stride(tile, env, addr, stride,
-                                   shape.m, shape.k, true);
-}
-
-void HELPER(xsmtame_mlbte8)(CPURISCVState *env, uint32_t td,
-                       target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint8_t *tile = xsmtame_tile_ptr(env, td);
-
-    xsmtame_load_tile8_stride(tile, env, addr, stride,
-                                   shape.n, shape.k, true);
-}
-
-void HELPER(xsmtame_mlme16)(CPURISCVState *env, uint32_t td,
-                        target_ulong addr)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
-
-    xsmtame_load_tile16_stride(tile16, env, addr,
-                                    shape.k * sizeof(*tile16),
-                                    shape.m, shape.k, false);
-}
-
-void HELPER(xsmtame_mlae16)(CPURISCVState *env, uint32_t td,
-                        target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
-
-    xsmtame_load_tile16_stride(tile16, env, addr, stride,
-                                    shape.m, shape.k, false);
-}
-
-void HELPER(xsmtame_mlae32)(CPURISCVState *env, uint32_t td,
-                        target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
-
-    xsmtame_load_tile32_stride(tile32, env, addr, stride,
-                                    shape.m, shape.k, false);
-}
-
-void HELPER(xsmtame_mlbe16)(CPURISCVState *env, uint32_t td,
-                        target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
-
-    xsmtame_load_tile16_stride(tile16, env, addr, stride,
-                                    shape.n, shape.k, false);
-}
-
-void HELPER(xsmtame_mlbe32)(CPURISCVState *env, uint32_t td,
-                        target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
-
-    xsmtame_load_tile32_stride(tile32, env, addr, stride,
-                                    shape.n, shape.k, false);
-}
-
-void HELPER(xsmtame_mlate16)(CPURISCVState *env, uint32_t td,
-                         target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
-
-    xsmtame_load_tile16_stride(tile16, env, addr, stride,
-                                    shape.m, shape.k, true);
-}
-
-void HELPER(xsmtame_mlate32)(CPURISCVState *env, uint32_t td,
-                         target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
-
-    xsmtame_load_tile32_stride(tile32, env, addr, stride,
-                                    shape.m, shape.k, true);
-}
-
-void HELPER(xsmtame_mlbte16)(CPURISCVState *env, uint32_t td,
-                         target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
-
-    xsmtame_load_tile16_stride(tile16, env, addr, stride,
-                                    shape.n, shape.k, true);
-}
-
-void HELPER(xsmtame_mlbte32)(CPURISCVState *env, uint32_t td,
-                         target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
-
-    xsmtame_load_tile32_stride(tile32, env, addr, stride,
-                                    shape.n, shape.k, true);
-}
-
-void HELPER(xsmtame_mlce8)(CPURISCVState *env, uint32_t ad,
-                       target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint8_t *acc8 = xsmtame_acc8_ptr(env, ad);
-
-    xsmtame_load_acc8_stride(acc8, env, addr, stride,
-                                  shape.m, shape.n, false);
-}
-
-void HELPER(xsmtame_mlce16)(CPURISCVState *env, uint32_t ad,
-                        target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint16_t *acc16 = xsmtame_acc16_ptr(env, ad);
-
-    xsmtame_load_acc16_stride(acc16, env, addr, stride,
-                                   shape.m, shape.n, false);
-}
-
-void HELPER(xsmtame_mlce32)(CPURISCVState *env, uint32_t ad,
-                        target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint32_t *acc32 = xsmtame_acc32_ptr(env, ad);
-
-    xsmtame_load_acc32_stride(acc32, env, addr, stride,
-                                   shape.m, shape.n, false);
-}
-
-void HELPER(xsmtame_mlcte8)(CPURISCVState *env, uint32_t ad,
-                        target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint8_t *acc8 = xsmtame_acc8_ptr(env, ad);
-
-    xsmtame_load_acc8_stride(acc8, env, addr, stride,
-                                  shape.m, shape.n, true);
-}
-
-void HELPER(xsmtame_mlcte16)(CPURISCVState *env, uint32_t ad,
-                         target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint16_t *acc16 = xsmtame_acc16_ptr(env, ad);
-
-    xsmtame_load_acc16_stride(acc16, env, addr, stride,
-                                   shape.m, shape.n, true);
-}
-
-void HELPER(xsmtame_mlcte32)(CPURISCVState *env, uint32_t ad,
-                         target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint32_t *acc32 = xsmtame_acc32_ptr(env, ad);
-
-    xsmtame_load_acc32_stride(acc32, env, addr, stride,
-                                   shape.m, shape.n, true);
-}
-
-void HELPER(xsmtame_mlme32)(CPURISCVState *env, uint32_t ad,
-                        target_ulong addr)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint32_t *acc32 = xsmtame_acc32_ptr(env, ad);
-
-    xsmtame_load_acc32_stride(acc32, env, addr,
-                                   shape.n * sizeof(*acc32),
-                                   shape.m, shape.n, false);
-}
+GEN_XSMTAME_WHOLE_STORE_HELPER(xsmtame_msme8)
+GEN_XSMTAME_WHOLE_STORE_HELPER(xsmtame_msme16)
+GEN_XSMTAME_WHOLE_STORE_HELPER(xsmtame_msme32)
 
 /*
  * ──────────────────────────────────────────
- *  Store helpers
+ *  Stride load/store helpers
  * ──────────────────────────────────────────
+ *
+ * Legacy helpers still support stride where required by old instructions.
+ * mlae/mlbe use explicit stride without transpose.
+ * mlate/mlbte use explicit stride and transpose while loading.
+ * msae/msbe use explicit stride without transpose while storing.
+ * msate/msbte use explicit stride and transpose while storing.
  */
 
-void HELPER(xsmtame_msae16)(CPURISCVState *env, uint32_t td,
-                        target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
-
-    xsmtame_store_tile16_stride(tile16, env, addr, stride,
-                                     shape.m, shape.k, false);
-}
-
-void HELPER(xsmtame_msae32)(CPURISCVState *env, uint32_t td,
-                        target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
-
-    xsmtame_store_tile32_stride(tile32, env, addr, stride,
-                                     shape.m, shape.k, false);
-}
-
-void HELPER(xsmtame_msae8)(CPURISCVState *env, uint32_t td,
-                       target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint8_t *tile = xsmtame_tile_ptr(env, td);
-
-    xsmtame_store_tile8_stride(tile, env, addr, stride,
-                                    shape.m, shape.k, false);
-}
-
-void HELPER(xsmtame_msbe16)(CPURISCVState *env, uint32_t td,
-                        target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
-
-    xsmtame_store_tile16_stride(tile16, env, addr, stride,
-                                     shape.n, shape.k, false);
-}
-
-void HELPER(xsmtame_msbe32)(CPURISCVState *env, uint32_t td,
-                        target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
-
-    xsmtame_store_tile32_stride(tile32, env, addr, stride,
-                                     shape.n, shape.k, false);
-}
-
-void HELPER(xsmtame_msbe8)(CPURISCVState *env, uint32_t td,
-                       target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint8_t *tile = xsmtame_tile_ptr(env, td);
-
-    xsmtame_store_tile8_stride(tile, env, addr, stride,
-                                    shape.n, shape.k, false);
-}
-
-void HELPER(xsmtame_msce8)(CPURISCVState *env, uint32_t ad,
-                       target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint8_t *acc8 = xsmtame_acc8_ptr(env, ad);
-
-    xsmtame_store_acc8_stride(acc8, env, addr, stride,
-                                   shape.m, shape.n, false);
-}
-
-void HELPER(xsmtame_msce16)(CPURISCVState *env, uint32_t ad,
-                        target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint16_t *acc16 = xsmtame_acc16_ptr(env, ad);
-
-    xsmtame_store_acc16_stride(acc16, env, addr, stride,
-                                    shape.m, shape.n, false);
-}
-
-void HELPER(xsmtame_msce32)(CPURISCVState *env, uint32_t ad,
-                        target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint32_t *acc32 = xsmtame_acc32_ptr(env, ad);
-
-    xsmtame_store_acc32_stride(acc32, env, addr, stride,
-                                    shape.m, shape.n, false);
-}
-
-void HELPER(xsmtame_msate8)(CPURISCVState *env, uint32_t td,
-                       target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint8_t *tile = xsmtame_tile_ptr(env, td);
-
-    xsmtame_store_tile8_stride(tile, env, addr, stride,
-                                    shape.m, shape.k, true);
-}
-
-void HELPER(xsmtame_msbte8)(CPURISCVState *env, uint32_t td,
-                       target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint8_t *tile = xsmtame_tile_ptr(env, td);
-
-    xsmtame_store_tile8_stride(tile, env, addr, stride,
-                                    shape.n, shape.k, true);
-}
-
-void HELPER(xsmtame_mscte8)(CPURISCVState *env, uint32_t ad,
-                        target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint8_t *acc8 = xsmtame_acc8_ptr(env, ad);
-
-    xsmtame_store_acc8_stride(acc8, env, addr, stride,
-                                   shape.m, shape.n, true);
-}
-
-void HELPER(xsmtame_mscte16)(CPURISCVState *env, uint32_t ad,
-                         target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint16_t *acc16 = xsmtame_acc16_ptr(env, ad);
-
-    xsmtame_store_acc16_stride(acc16, env, addr, stride,
-                                    shape.m, shape.n, true);
-}
-
-void HELPER(xsmtame_mscte32)(CPURISCVState *env, uint32_t ad,
-                         target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint32_t *acc32 = xsmtame_acc32_ptr(env, ad);
-
-    xsmtame_store_acc32_stride(acc32, env, addr, stride,
-                                    shape.m, shape.n, true);
-}
-
-void HELPER(xsmtame_msate16)(CPURISCVState *env, uint32_t td,
-                         target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
-
-    xsmtame_store_tile16_stride(tile16, env, addr, stride,
-                                     shape.m, shape.k, true);
-}
-
-void HELPER(xsmtame_msate32)(CPURISCVState *env, uint32_t td,
-                         target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
-
-    xsmtame_store_tile32_stride(tile32, env, addr, stride,
-                                     shape.m, shape.k, true);
-}
-
-void HELPER(xsmtame_msbte16)(CPURISCVState *env, uint32_t td,
-                         target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
-
-    xsmtame_store_tile16_stride(tile16, env, addr, stride,
-                                     shape.n, shape.k, true);
-}
-
-void HELPER(xsmtame_msbte32)(CPURISCVState *env, uint32_t td,
-                         target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint32_t *tile32 = xsmtame_tile32_ptr(env, td);
-
-    xsmtame_store_tile32_stride(tile32, env, addr, stride,
-                                     shape.n, shape.k, true);
-}
-
-void HELPER(xsmtame_msme8)(CPURISCVState *env, uint32_t td,
-                       target_ulong addr, target_ulong stride)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint8_t *tile = xsmtame_tile_ptr(env, td);
-
-    xsmtame_store_tile8_stride(tile, env, addr, stride,
-                                    shape.m, shape.k, false);
-}
-
-void HELPER(xsmtame_msme16)(CPURISCVState *env, uint32_t td,
-                        target_ulong addr)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    const uint16_t *tile16 = xsmtame_tile16_ptr(env, td);
-
-    xsmtame_store_tile16_stride(tile16, env, addr,
-                                     shape.k * sizeof(*tile16),
-                                     shape.m, shape.k, false);
-}
-
-void HELPER(xsmtame_msme32)(CPURISCVState *env, uint32_t ad,
-                        target_ulong addr)
-{
-    AMEShapeInfo shape = xsmtame_shape(env);
-    uint32_t *acc32 = xsmtame_acc32_ptr(env, ad);
-
-    xsmtame_store_acc32_stride(acc32, env, addr,
-                                    shape.n * sizeof(*acc32),
-                                    shape.m, shape.n, false);
-}
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlae8, uint8_t, td,
+                               xsmtame_tile_ptr, xsmtame_load_tile8_stride,
+                               shape.m, shape.k, false)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlae16, uint16_t, td,
+                               xsmtame_tile16_ptr, xsmtame_load_tile16_stride,
+                               shape.m, shape.k, false)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlae32, uint32_t, td,
+                               xsmtame_tile32_ptr, xsmtame_load_tile32_stride,
+                               shape.m, shape.k, false)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlbe8, uint8_t, td,
+                               xsmtame_tile_ptr, xsmtame_load_tile8_stride,
+                               shape.n, shape.k, false)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlbe16, uint16_t, td,
+                               xsmtame_tile16_ptr, xsmtame_load_tile16_stride,
+                               shape.n, shape.k, false)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlbe32, uint32_t, td,
+                               xsmtame_tile32_ptr, xsmtame_load_tile32_stride,
+                               shape.n, shape.k, false)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlce8, uint8_t, ad,
+                               xsmtame_acc8_ptr, xsmtame_load_acc8_stride,
+                               shape.m, shape.n, false)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlce16, uint16_t, ad,
+                               xsmtame_acc16_ptr, xsmtame_load_acc16_stride,
+                               shape.m, shape.n, false)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlce32, uint32_t, ad,
+                               xsmtame_acc32_ptr, xsmtame_load_acc32_stride,
+                               shape.m, shape.n, false)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msae8, uint8_t, td,
+                                xsmtame_tile_ptr, xsmtame_store_tile8_stride,
+                                shape.m, shape.k, false)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msae16, uint16_t, td,
+                                xsmtame_tile16_ptr, xsmtame_store_tile16_stride,
+                                shape.m, shape.k, false)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msae32, uint32_t, td,
+                                xsmtame_tile32_ptr, xsmtame_store_tile32_stride,
+                                shape.m, shape.k, false)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msbe8, uint8_t, td,
+                                xsmtame_tile_ptr, xsmtame_store_tile8_stride,
+                                shape.n, shape.k, false)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msbe16, uint16_t, td,
+                                xsmtame_tile16_ptr, xsmtame_store_tile16_stride,
+                                shape.n, shape.k, false)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msbe32, uint32_t, td,
+                                xsmtame_tile32_ptr, xsmtame_store_tile32_stride,
+                                shape.n, shape.k, false)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msce8, uint8_t, ad,
+                                xsmtame_acc8_ptr, xsmtame_store_acc8_stride,
+                                shape.m, shape.n, false)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msce16, uint16_t, ad,
+                                xsmtame_acc16_ptr, xsmtame_store_acc16_stride,
+                                shape.m, shape.n, false)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msce32, uint32_t, ad,
+                                xsmtame_acc32_ptr, xsmtame_store_acc32_stride,
+                                shape.m, shape.n, false)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlate8, uint8_t, td,
+                               xsmtame_tile_ptr, xsmtame_load_tile8_stride,
+                               shape.m, shape.k, true)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlate16, uint16_t, td,
+                               xsmtame_tile16_ptr, xsmtame_load_tile16_stride,
+                               shape.m, shape.k, true)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlate32, uint32_t, td,
+                               xsmtame_tile32_ptr, xsmtame_load_tile32_stride,
+                               shape.m, shape.k, true)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlbte8, uint8_t, td,
+                               xsmtame_tile_ptr, xsmtame_load_tile8_stride,
+                               shape.n, shape.k, true)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlbte16, uint16_t, td,
+                               xsmtame_tile16_ptr, xsmtame_load_tile16_stride,
+                               shape.n, shape.k, true)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlbte32, uint32_t, td,
+                               xsmtame_tile32_ptr, xsmtame_load_tile32_stride,
+                               shape.n, shape.k, true)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlcte8, uint8_t, ad,
+                               xsmtame_acc8_ptr, xsmtame_load_acc8_stride,
+                               shape.m, shape.n, true)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlcte16, uint16_t, ad,
+                               xsmtame_acc16_ptr, xsmtame_load_acc16_stride,
+                               shape.m, shape.n, true)
+GEN_XSMTAME_STRIDE_LOAD_HELPER(xsmtame_mlcte32, uint32_t, ad,
+                               xsmtame_acc32_ptr, xsmtame_load_acc32_stride,
+                               shape.m, shape.n, true)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msate8, uint8_t, td,
+                                xsmtame_tile_ptr, xsmtame_store_tile8_stride,
+                                shape.m, shape.k, true)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msate16, uint16_t, td,
+                                xsmtame_tile16_ptr, xsmtame_store_tile16_stride,
+                                shape.m, shape.k, true)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msate32, uint32_t, td,
+                                xsmtame_tile32_ptr, xsmtame_store_tile32_stride,
+                                shape.m, shape.k, true)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msbte8, uint8_t, td,
+                                xsmtame_tile_ptr, xsmtame_store_tile8_stride,
+                                shape.n, shape.k, true)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msbte16, uint16_t, td,
+                                xsmtame_tile16_ptr, xsmtame_store_tile16_stride,
+                                shape.n, shape.k, true)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_msbte32, uint32_t, td,
+                                xsmtame_tile32_ptr, xsmtame_store_tile32_stride,
+                                shape.n, shape.k, true)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_mscte8, uint8_t, ad,
+                                xsmtame_acc8_ptr, xsmtame_store_acc8_stride,
+                                shape.m, shape.n, true)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_mscte16, uint16_t, ad,
+                                xsmtame_acc16_ptr, xsmtame_store_acc16_stride,
+                                shape.m, shape.n, true)
+GEN_XSMTAME_STRIDE_STORE_HELPER(xsmtame_mscte32, uint32_t, ad,
+                                xsmtame_acc32_ptr, xsmtame_store_acc32_stride,
+                                shape.m, shape.n, true)
 
 /*
  * ──────────────────────────────────────────
@@ -889,40 +764,70 @@ void HELPER(xsmtame_msme32)(CPURISCVState *env, uint32_t ad,
  * ──────────────────────────────────────────
  *
  * INT8 → INT32 GEMM  (mmacc.w.b):
- *   acc[ad][m][n] += Σ_{k} (int32)tile_A[ts2][m][k] * (int32)tile_B_T[ts1][n][k]
+ *   acc[ad][m][n] += Σ_{k} (int32)tile_A[ms1][m][k] * (int32)tile_B_T[ms2][n][k]
  *
- * tile_B is stored transposed: shape [N][K], so tile_B_T[n][k] is natural.
+ * tile_B is stored transposed: shape [N][K], so tile_B_T[ms2][n][k] is natural.
  *
  * FP16 → FP32 GEMM  (mfmacc.s.h):
  *   mfmacc.s.h md, ms2, ms1
  *   acc[md][m][n] += Σ_{k} fp32(A[ms1][m][k]) * fp32(B_T[ms2][n][k])
  */
 
+static inline int32_t xsmtame_acc_add_i32(CPURISCVState *env,
+                                          int32_t acc,
+                                          int32_t sum)
+{
+    int64_t wide = (int64_t)acc + (int64_t)sum;
+
+    if (!(env->xmsaten & 0x1)) {
+        return (int32_t)wide;
+    }
+
+    if (wide > INT32_MAX) {
+        env->xmsat = 1;
+        return INT32_MAX;
+    }
+    if (wide < INT32_MIN) {
+        env->xmsat = 1;
+        return INT32_MIN;
+    }
+
+    return (int32_t)wide;
+}
+
 static void xsmtame_mmacc_w_b_common(CPURISCVState *env, uint32_t ad,
-                                          uint32_t ts2, uint32_t ts1,
-                                          bool lhs_unsigned,
-                                          bool rhs_unsigned)
+                                     uint32_t ms2, uint32_t ms1,
+                                     bool ms1_unsigned,
+                                     bool ms2_unsigned)
 {
     AMEShapeInfo shape = xsmtame_shape(env);
-    const uint8_t *tA = (const uint8_t *)xsmtame_tile8s_ptr(env, ts2);
-    const uint8_t *tBT = (const uint8_t *)xsmtame_tile8s_ptr(env, ts1);
+    const uint8_t *tA = (const uint8_t *)xsmtame_tile8s_ptr(env, ms1);
+    const uint8_t *tBT = (const uint8_t *)xsmtame_tile8s_ptr(env, ms2);
     int32_t *acc = (int32_t *)xsmtame_acc32_ptr(env, ad);
+    size_t a_row_bytes = xsmtame_matrix_layout(env, ms1, 0).row_bytes;
+    size_t b_row_bytes = xsmtame_matrix_layout(env, ms2, 0).row_bytes;
+    size_t acc_cols = xsmtame_matrix_layout(env, ad + AME_NR_TILES,
+                                            sizeof(*acc)).cols;
     uint32_t m, n, k;
 
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
             int32_t sum = 0;
             for (k = 0; k < shape.k; k++) {
-                uint32_t a_raw = tA[m * shape.k + k];
-                uint32_t b_raw = tBT[n * shape.k + k];
-                int32_t a = lhs_unsigned ? (int32_t)a_raw : (int32_t)(int8_t)a_raw;
-                int32_t b = rhs_unsigned ? (int32_t)b_raw : (int32_t)(int8_t)b_raw;
+                uint32_t a_raw = tA[m * a_row_bytes + k];
+                uint32_t b_raw = tBT[n * b_row_bytes + k];
+                int32_t a = ms1_unsigned ? (int32_t)a_raw : (int32_t)(int8_t)a_raw;
+                int32_t b = ms2_unsigned ? (int32_t)b_raw : (int32_t)(int8_t)b_raw;
 
                 sum += a * b;
             }
-            acc[m * shape.n + n] += sum;
+            acc[m * acc_cols + n] = xsmtame_acc_add_i32(env,
+                                                       acc[m * acc_cols + n],
+                                                       sum);
         }
     }
+
+    xsmtame_zero_acc_inactive_region(env, ad, sizeof(*acc));
 }
 
 void HELPER(xsmtame_mmaccu_w_b)(CPURISCVState *env, uint32_t ad,
@@ -1429,22 +1334,28 @@ static void xsmtame_mfmacc16_common(CPURISCVState *env, uint32_t md,
     const uint16_t *tA = xsmtame_tile16_ptr(env, ms1);
     const uint16_t *tBT = xsmtame_tile16_ptr(env, ms2);
     uint32_t *acc = xsmtame_acc32_ptr(env, md);
+    size_t a_cols = xsmtame_matrix_layout(env, ms1, sizeof(*tA)).cols;
+    size_t b_cols = xsmtame_matrix_layout(env, ms2, sizeof(*tBT)).cols;
+    size_t acc_cols = xsmtame_matrix_layout(env, md + AME_NR_TILES,
+                                            sizeof(*acc)).cols;
     float_status *fpst = &env->fp_status;
     uint32_t m, n;
 
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
-            float32 c = make_float32(acc[m * shape.n + n]);
-            c = xsmtame_mfmacc_cell16_internal30(&tA[m * shape.k],
-                                                      &tBT[n * shape.k],
+            float32 c = make_float32(acc[m * acc_cols + n]);
+            c = xsmtame_mfmacc_cell16_internal30(&tA[m * a_cols],
+                                                      &tBT[n * b_cols],
                                                       shape.k,
                                                       c,
                                                       mul_to_internal,
                                                       fallback_convert,
                                                       fpst);
-            acc[m * shape.n + n] = float32_val(c);
+            acc[m * acc_cols + n] = float32_val(c);
         }
     }
+
+    xsmtame_zero_acc_inactive_region(env, md, sizeof(*acc));
 }
 
 static void xsmtame_mfmacc8_common(CPURISCVState *env, uint32_t md,
@@ -1459,22 +1370,28 @@ static void xsmtame_mfmacc8_common(CPURISCVState *env, uint32_t md,
     const uint8_t *tA = (const uint8_t *)xsmtame_tile_ptr(env, ms1);
     const uint8_t *tBT = (const uint8_t *)xsmtame_tile_ptr(env, ms2);
     uint32_t *acc = xsmtame_acc32_ptr(env, md);
+    size_t a_row_bytes = xsmtame_matrix_layout(env, ms1, 0).row_bytes;
+    size_t b_row_bytes = xsmtame_matrix_layout(env, ms2, 0).row_bytes;
+    size_t acc_cols = xsmtame_matrix_layout(env, md + AME_NR_TILES,
+                                            sizeof(*acc)).cols;
     float_status *fpst = &env->fp_status;
     uint32_t m, n;
 
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
-            float32 c = make_float32(acc[m * shape.n + n]);
-            c = xsmtame_mfmacc_cell8_internal30(&tA[m * shape.k],
-                                                     &tBT[n * shape.k],
+            float32 c = make_float32(acc[m * acc_cols + n]);
+            c = xsmtame_mfmacc_cell8_internal30(&tA[m * a_row_bytes],
+                                                     &tBT[n * b_row_bytes],
                                                      shape.k,
                                                      c,
                                                      mul_to_internal,
                                                      fallback_convert,
                                                      fpst);
-            acc[m * shape.n + n] = float32_val(c);
+            acc[m * acc_cols + n] = float32_val(c);
         }
     }
+
+    xsmtame_zero_acc_inactive_region(env, md, sizeof(*acc));
 }
 
 static void xsmtame_mfmacc16_acc16_common(CPURISCVState *env, uint32_t md,
@@ -1491,22 +1408,28 @@ static void xsmtame_mfmacc16_acc16_common(CPURISCVState *env, uint32_t md,
     const uint16_t *tA = xsmtame_tile16_ptr(env, ms1);
     const uint16_t *tBT = xsmtame_tile16_ptr(env, ms2);
     uint16_t *acc = xsmtame_acc16_ptr(env, md);
+    size_t a_cols = xsmtame_matrix_layout(env, ms1, sizeof(*tA)).cols;
+    size_t b_cols = xsmtame_matrix_layout(env, ms2, sizeof(*tBT)).cols;
+    size_t acc_cols = xsmtame_matrix_layout(env, md + AME_NR_TILES,
+                                            sizeof(*acc)).cols;
     float_status *fpst = &env->fp_status;
     uint32_t m, n;
 
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
-            float32 c = acc_to_f32(acc[m * shape.n + n], fpst);
-            c = xsmtame_mfmacc_cell16_internal30(&tA[m * shape.k],
-                                                      &tBT[n * shape.k],
+            float32 c = acc_to_f32(acc[m * acc_cols + n], fpst);
+            c = xsmtame_mfmacc_cell16_internal30(&tA[m * a_cols],
+                                                      &tBT[n * b_cols],
                                                       shape.k,
                                                       c,
                                                       mul_to_internal,
                                                       xsmtame_mfmacc_fp16_to_f32,
                                                       fpst);
-            acc[m * shape.n + n] = f32_to_acc(c, fpst);
+            acc[m * acc_cols + n] = f32_to_acc(c, fpst);
         }
     }
+
+    xsmtame_zero_acc_inactive_region(env, md, sizeof(*acc));
 }
 
 static void xsmtame_mfmacc8_acc16_common(CPURISCVState *env, uint32_t md,
@@ -1525,22 +1448,28 @@ static void xsmtame_mfmacc8_acc16_common(CPURISCVState *env, uint32_t md,
     const uint8_t *tA = (const uint8_t *)xsmtame_tile_ptr(env, ms1);
     const uint8_t *tBT = (const uint8_t *)xsmtame_tile_ptr(env, ms2);
     uint16_t *acc = xsmtame_acc16_ptr(env, md);
+    size_t a_row_bytes = xsmtame_matrix_layout(env, ms1, 0).row_bytes;
+    size_t b_row_bytes = xsmtame_matrix_layout(env, ms2, 0).row_bytes;
+    size_t acc_cols = xsmtame_matrix_layout(env, md + AME_NR_TILES,
+                                            sizeof(*acc)).cols;
     float_status *fpst = &env->fp_status;
     uint32_t m, n;
 
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
-            float32 c = acc_to_f32(acc[m * shape.n + n], fpst);
-            c = xsmtame_mfmacc_cell8_internal30(&tA[m * shape.k],
-                                                     &tBT[n * shape.k],
+            float32 c = acc_to_f32(acc[m * acc_cols + n], fpst);
+            c = xsmtame_mfmacc_cell8_internal30(&tA[m * a_row_bytes],
+                                                     &tBT[n * b_row_bytes],
                                                      shape.k,
                                                      c,
                                                      mul_to_internal,
                                                      fallback_convert,
                                                      fpst);
-            acc[m * shape.n + n] = f32_to_acc(c, fpst);
+            acc[m * acc_cols + n] = f32_to_acc(c, fpst);
         }
     }
+
+    xsmtame_zero_acc_inactive_region(env, md, sizeof(*acc));
 }
 
 void HELPER(xsmtame_mfmacc_h_e5)(CPURISCVState *env, uint32_t md,
@@ -1636,13 +1565,26 @@ void HELPER(xsmtame_mmov_mm)(CPURISCVState *env, uint32_t md,
     size_t src_size;
     uint8_t *dst = xsmtame_matrix_ptr(env, md, &dst_size);
     uint8_t *src = xsmtame_matrix_ptr(env, ms1, &src_size);
-    size_t copy_size = MIN(dst_size, src_size);
 
     if (dst == src) {
         return;
     }
 
-    memmove(dst, src, copy_size);
+    {
+        size_t dst_row_bytes = xsmtame_matrix_layout(env, md, 0).row_bytes;
+        size_t src_row_bytes = xsmtame_matrix_layout(env, ms1, 0).row_bytes;
+        size_t copy_bytes = MIN(dst_row_bytes, src_row_bytes);
+        size_t dst_rows = dst_row_bytes ? dst_size / dst_row_bytes : 0;
+        size_t src_rows = src_row_bytes ? src_size / src_row_bytes : 0;
+        size_t rows = MIN(dst_rows, src_rows);
+        size_t row;
+
+        for (row = 0; row < rows; row++) {
+            memmove(dst + row * dst_row_bytes,
+                    src + row * src_row_bytes,
+                    copy_bytes);
+        }
+    }
 }
 
 target_ulong HELPER(xsmtame_mmovb_x_m)(CPURISCVState *env, uint32_t ms2,
@@ -1652,7 +1594,7 @@ target_ulong HELPER(xsmtame_mmovb_x_m)(CPURISCVState *env, uint32_t ms2,
     uint8_t *src = xsmtame_matrix_ptr(env, ms2, &reg_size);
     size_t offset = xsmtame_mmov_elem_offset(reg_size, 1, idx);
 
-    return src[offset];
+    return (target_ulong)(target_long)(int8_t)src[offset];
 }
 
 target_ulong HELPER(xsmtame_mmovh_x_m)(CPURISCVState *env, uint32_t ms2,
@@ -1662,7 +1604,7 @@ target_ulong HELPER(xsmtame_mmovh_x_m)(CPURISCVState *env, uint32_t ms2,
     uint8_t *src = xsmtame_matrix_ptr(env, ms2, &reg_size);
     size_t offset = xsmtame_mmov_elem_offset(reg_size, 2, idx);
 
-    return lduw_le_p(src + offset);
+    return (target_ulong)(target_long)(int16_t)lduw_le_p(src + offset);
 }
 
 target_ulong HELPER(xsmtame_mmovw_x_m)(CPURISCVState *env, uint32_t ms2,
@@ -1672,7 +1614,7 @@ target_ulong HELPER(xsmtame_mmovw_x_m)(CPURISCVState *env, uint32_t ms2,
     uint8_t *src = xsmtame_matrix_ptr(env, ms2, &reg_size);
     size_t offset = xsmtame_mmov_elem_offset(reg_size, 4, idx);
 
-    return ldl_le_p(src + offset);
+    return (target_ulong)(target_long)(int32_t)ldl_le_p(src + offset);
 }
 
 target_ulong HELPER(xsmtame_mmovd_x_m)(CPURISCVState *env, uint32_t ms2,
@@ -1722,10 +1664,13 @@ static void xsmtame_mpack_common(CPURISCVState *env, uint32_t md,
     uint8_t *dst = xsmtame_matrix_ptr(env, md, &reg_size);
     uint8_t *src2 = xsmtame_matrix_ptr(env, ms2, NULL);
     uint8_t *src1 = xsmtame_matrix_ptr(env, ms1, NULL);
-    size_t row_bytes = xsmtame_matrix_row_bytes(env, md);
+    size_t row_bytes = xsmtame_matrix_layout(env, md, 0).row_bytes;
     size_t half = row_bytes / 2;
     size_t rows = reg_size / row_bytes;
     size_t row;
+
+    xsmtame_validate_same_matrix_layout(env, md, ms1);
+    xsmtame_validate_same_matrix_layout(env, md, ms2);
 
     g_assert(row_bytes % 2 == 0);
 
@@ -1751,24 +1696,30 @@ static void xsmtame_mrslide_common(CPURISCVState *env, uint32_t md,
     uint8_t tmp[AME_ACC_LEN_B];
     uint8_t *dst = xsmtame_matrix_ptr(env, md, &reg_size);
     uint8_t *src = xsmtame_matrix_ptr(env, ms1, NULL);
-    size_t row_bytes = xsmtame_matrix_row_bytes(env, md);
+    size_t row_bytes = xsmtame_matrix_layout(env, md, 0).row_bytes;
     size_t rows = reg_size / row_bytes;
     size_t row;
+
+    xsmtame_validate_same_matrix_layout(env, md, ms1);
+
+    if (rows != 0) {
+        amount &= rows - 1;
+    }
 
     memset(tmp, 0, reg_size);
     for (row = 0; row < rows; row++) {
         size_t src_row;
 
         if (up) {
-            src_row = row + amount;
-            if (src_row >= rows) {
-                continue;
-            }
-        } else {
             if (row < amount) {
                 continue;
             }
             src_row = row - amount;
+        } else {
+            src_row = row + amount;
+            if (src_row >= rows) {
+                continue;
+            }
         }
 
         memcpy(tmp + row * row_bytes, src + src_row * row_bytes, row_bytes);
@@ -1785,11 +1736,17 @@ static void xsmtame_mcslide_common(CPURISCVState *env, uint32_t md,
     uint8_t tmp[AME_ACC_LEN_B];
     uint8_t *dst = xsmtame_matrix_ptr(env, md, &reg_size);
     uint8_t *src = xsmtame_matrix_ptr(env, ms1, NULL);
-    size_t row_bytes = xsmtame_matrix_row_bytes(env, md);
+    size_t row_bytes = xsmtame_matrix_layout(env, md, 0).row_bytes;
     size_t rows = reg_size / row_bytes;
-    size_t cols = xsmtame_matrix_col_count(env, md, elem_size);
+    size_t cols = xsmtame_matrix_layout(env, md, elem_size).cols;
     size_t row;
     size_t col;
+
+    xsmtame_validate_same_matrix_layout(env, md, ms1);
+
+    if (cols != 0) {
+        amount &= cols - 1;
+    }
 
     memset(tmp, 0, reg_size);
     for (row = 0; row < rows; row++) {
@@ -1797,15 +1754,15 @@ static void xsmtame_mcslide_common(CPURISCVState *env, uint32_t md,
             size_t src_col;
 
             if (up) {
-                src_col = col + amount;
-                if (src_col >= cols) {
-                    continue;
-                }
-            } else {
                 if (col < amount) {
                     continue;
                 }
                 src_col = col - amount;
+            } else {
+                src_col = col + amount;
+                if (src_col >= cols) {
+                    continue;
+                }
             }
 
             memcpy(tmp + row * row_bytes + col * elem_size,

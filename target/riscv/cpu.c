@@ -815,6 +815,8 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type)
         env->mtilem = ame_cfg_rownum(&cpu->cfg);
         env->mtilen = ame_cfg_rownum(&cpu->cfg);
         env->mtilek = ame_cfg_kmax(&cpu->cfg);
+        env->xmsat = 0;
+        env->xmsaten = 0;
 #ifndef CONFIG_USER_ONLY
         env->mstatus = set_field(env->mstatus, MSTATUS_MS, EXT_STATUS_INITIAL);
 #endif

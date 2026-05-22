@@ -64,6 +64,65 @@ Additional information can also be found online via the QEMU website:
 * `<https://wiki.qemu.org/Hosts/W32>`_
 
 
+XSmt extensions in this branch
+==============================
+
+This branch contains local RISC-V XSmt extension support used for matrix
+and special-function emulation work.
+
+* ``XSmtAme``
+
+  * Attached Matrix Extension support for tile/accumulator style matrix
+    registers.
+  * Current implementation covers configuration instructions
+    (``msettile*``, ``mzero*``, ``mrelease``), tile/acc load-store,
+    matrix move/pack/slide operations, and GEMM helpers.
+
+* ``XSmtSfu``
+
+  * Elementwise FP32 tile special-function operations built on top of the
+    XSmtAme register model.
+  * Current instructions are ``vfex2.v``, ``vftanh.v``, ``vflg2.v`` and
+    ``vfrcp.v``.
+  * Source and destination operands are constrained to tile registers
+    ``tr0`` .. ``tr3``.
+
+
+XSmt usage
+==========
+
+Build the RISC-V user emulator first:
+
+.. code-block:: shell
+
+  build/pyvenv/bin/meson compile -C build qemu-riscv64
+
+Run a RISC-V user binary with XSmt enabled:
+
+.. code-block:: shell
+
+  build/qemu-riscv64 -cpu rv64,xsmtame=true,xsmtame-version=0.6 <your-riscv64-program>
+
+If you want to make the matrix geometry explicit, the current CPU properties are:
+
+.. code-block:: shell
+
+  build/qemu-riscv64 \
+    -cpu rv64,xsmtame=true,xsmtame-version=0.6,ame_tlen=1024,ame_trlen=32,elen=64 \
+    <your-riscv64-program>
+
+Notes:
+
+* ``XSmtSfu`` currently shares the same CPU enable switch as ``XSmtAme``.
+* XSmt decode/helper sources are located under
+  ``target/riscv/xsmtame.*`` and ``target/riscv/xsmtsfu.*``.
+* ``ame_tlen`` and ``ame_trlen`` are configured in bits.
+  The current defaults are ``ame_tlen=1024`` and ``ame_trlen=32``.
+  ``ame_trlen`` must be a power of 2 and must not exceed ``ame_tlen``.
+* Inside the XSmtAme implementation, the matrix accumulator element width is
+  currently fixed at 32 bits (FP32-oriented for the existing XSmtSfu ops).
+
+
 Submitting patches
 ==================
 
