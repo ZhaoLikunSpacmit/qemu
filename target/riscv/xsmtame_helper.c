@@ -255,6 +255,53 @@ static inline AMEMatrixLayout xsmtame_matrix_layout(CPURISCVState *env,
     };
 }
 
+static inline bool xsmtame_matrix_is_same_class(uint32_t lhs, uint32_t rhs)
+{
+    return (lhs < AME_NR_TILES) == (rhs < AME_NR_TILES);
+}
+
+static inline size_t xsmtame_matrix_size(CPURISCVState *env, uint32_t reg)
+{
+    return reg < AME_NR_TILES ? ame_env_tlenb(env) : ame_env_acc_len_b(env);
+}
+
+static inline void xsmtame_validate_same_matrix_class(CPURISCVState *env,
+                                                      uint32_t lhs,
+                                                      uint32_t rhs)
+{
+    if (!xsmtame_matrix_is_same_class(lhs, rhs)) {
+        xsmtame_raise_illegal(env);
+    }
+}
+
+static inline void xsmtame_validate_same_matrix_len(CPURISCVState *env,
+                                                    uint32_t lhs,
+                                                    uint32_t rhs)
+{
+    if (xsmtame_matrix_size(env, lhs) != xsmtame_matrix_size(env, rhs)) {
+        xsmtame_raise_illegal(env);
+    }
+}
+
+static inline void xsmtame_validate_same_matrix_row_layout(CPURISCVState *env,
+                                                           uint32_t lhs,
+                                                           uint32_t rhs)
+{
+    if (xsmtame_matrix_layout(env, lhs, 0).row_bytes !=
+        xsmtame_matrix_layout(env, rhs, 0).row_bytes) {
+        xsmtame_raise_illegal(env);
+    }
+}
+
+static inline void xsmtame_validate_same_matrix_layout(CPURISCVState *env,
+                                                       uint32_t lhs,
+                                                       uint32_t rhs)
+{
+    xsmtame_validate_same_matrix_class(env, lhs, rhs);
+    xsmtame_validate_same_matrix_len(env, lhs, rhs);
+    xsmtame_validate_same_matrix_row_layout(env, lhs, rhs);
+}
+
 static void xsmtame_zero_acc_inactive_region(CPURISCVState *env,
                                              uint32_t ad,
                                              size_t elem_size)
@@ -1622,6 +1669,9 @@ static void xsmtame_mpack_common(CPURISCVState *env, uint32_t md,
     size_t rows = reg_size / row_bytes;
     size_t row;
 
+    xsmtame_validate_same_matrix_layout(env, md, ms1);
+    xsmtame_validate_same_matrix_layout(env, md, ms2);
+
     g_assert(row_bytes % 2 == 0);
 
     for (row = 0; row < rows; row++) {
@@ -1649,6 +1699,8 @@ static void xsmtame_mrslide_common(CPURISCVState *env, uint32_t md,
     size_t row_bytes = xsmtame_matrix_layout(env, md, 0).row_bytes;
     size_t rows = reg_size / row_bytes;
     size_t row;
+
+    xsmtame_validate_same_matrix_layout(env, md, ms1);
 
     if (rows != 0) {
         amount &= rows - 1;
@@ -1689,6 +1741,8 @@ static void xsmtame_mcslide_common(CPURISCVState *env, uint32_t md,
     size_t cols = xsmtame_matrix_layout(env, md, elem_size).cols;
     size_t row;
     size_t col;
+
+    xsmtame_validate_same_matrix_layout(env, md, ms1);
 
     if (cols != 0) {
         amount &= cols - 1;
