@@ -58,6 +58,20 @@
      (((uint32_t)(ms1) & 0x7u) << 15) | ((uint32_t)0x2 << 10) | \
      ((uint32_t)0x1 << 9) | (((uint32_t)(ad) & 0x3u) << 7) | AME_OP)
 
+#define AME_MATMUL_SRC_ENC(func4, uop3, s_size, ad, ms2, ms1) \
+    (((uint32_t)(func4) << 28) | ((uint32_t)0x1 << 26) | \
+     (((uint32_t)(uop3) & 0x7u) << 23) | (((uint32_t)(ms2) & 0x7u) << 20) | \
+     (((uint32_t)(s_size) & 0x3u) << 18) | (((uint32_t)(ms1) & 0x7u) << 15) | \
+     ((uint32_t)0x2 << 10) | ((uint32_t)0x1 << 9) | \
+     (((uint32_t)(ad) & 0x3u) << 7) | AME_OP)
+
+#define AME_MATMUL_ACC16_ENC(func4, uop3, s_size, ad, ms2, ms1) \
+    (((uint32_t)(func4) << 28) | ((uint32_t)0x1 << 26) | \
+     (((uint32_t)(uop3) & 0x7u) << 23) | (((uint32_t)(ms2) & 0x7u) << 20) | \
+     (((uint32_t)(s_size) & 0x3u) << 18) | (((uint32_t)(ms1) & 0x7u) << 15) | \
+     ((uint32_t)0x1 << 10) | ((uint32_t)0x1 << 9) | \
+     (((uint32_t)(ad) & 0x3u) << 7) | AME_OP)
+
 #define AME_SFU_ENC(funct3, vd, vs2) \
     (((uint32_t)0x13 << 26) | (((uint32_t)(vs2) & 0x1fu) << 20) | \
      ((uint32_t)0x7 << 15) | (((uint32_t)(funct3) & 0x7u) << 12) | \
@@ -83,6 +97,9 @@
 #define MMACCUS_W_B(ad, ms2, ms1) AME_MATMUL_ENC(0x1, 0x1, ad, ms2, ms1)
 #define MMACCSU_W_B(ad, ms2, ms1) AME_MATMUL_ENC(0x1, 0x2, ad, ms2, ms1)
 #define MMACC_W_B(ad, ms2, ms1) AME_MATMUL_ENC(0x1, 0x3, ad, ms2, ms1)
+
+#define MFMACC_S_H(ad, ms2, ms1) AME_MATMUL_SRC_ENC(0x0, 0x0, 0x1, ad, ms2, ms1)
+#define MFMACC_H(ad, ms2, ms1) AME_MATMUL_ACC16_ENC(0x0, 0x0, 0x1, ad, ms2, ms1)
 
 #define MMOV_MM(md, ms1) AME_MISC_MM_ENC(0x1, 0x0, md, 0, ms1)
 #define MMOVB_X_M(rd, ms2, rs1) AME_MISC_TO_GPR_ENC(0x0, rd, ms2, rs1)

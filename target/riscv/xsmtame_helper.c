@@ -203,7 +203,8 @@ static inline void xsmtame_store_matrix_full(CPURISCVState *env, uint32_t ms,
         AMEShapeInfo shape = xsmtame_shape(env);                            \
         ELEM_TYPE *data = PTR_FN(env, REGVAR);                              \
                                                                             \
-        LOAD_FN(data, env, addr, stride, ROW_EXPR, COL_EXPR, TRANSPOSE);    \
+        LOAD_FN(data, env, REGVAR, addr, stride,                            \
+                ROW_EXPR, COL_EXPR, TRANSPOSE);                             \
     }
 
 #define GEN_XSMTAME_STRIDE_STORE_HELPER(NAME, ELEM_TYPE, REGVAR, PTR_FN,    \
@@ -215,7 +216,8 @@ static inline void xsmtame_store_matrix_full(CPURISCVState *env, uint32_t ms,
         AMEShapeInfo shape = xsmtame_shape(env);                            \
         const ELEM_TYPE *data = PTR_FN(env, REGVAR);                        \
                                                                             \
-        STORE_FN(data, env, addr, stride, ROW_EXPR, COL_EXPR, TRANSPOSE);   \
+        STORE_FN(data, env, REGVAR, addr, stride,                           \
+                 ROW_EXPR, COL_EXPR, TRANSPOSE);                            \
     }
 
 static inline size_t xsmtame_mmov_elem_offset(size_t reg_size,
@@ -247,6 +249,32 @@ static inline size_t xsmtame_matrix_col_count(CPURISCVState *env,
     return row_bytes / elem_size;
 }
 
+static void xsmtame_zero_acc_inactive_region(CPURISCVState *env,
+                                             uint32_t ad,
+                                             size_t elem_size)
+{
+    AMEShapeInfo shape = xsmtame_shape(env);
+    size_t reg_size;
+    uint8_t *acc = xsmtame_matrix_ptr(env, ad, &reg_size);
+    size_t row_bytes = xsmtame_matrix_row_bytes(env, ad);
+    size_t rows = row_bytes ? reg_size / row_bytes : 0;
+    size_t cols = xsmtame_matrix_col_count(env, ad, elem_size);
+    size_t row;
+
+    g_assert(ad >= AME_NR_TILES);
+
+    for (row = 0; row < rows; row++) {
+        uint8_t *row_ptr = acc + row * row_bytes;
+
+        if (row >= shape.m) {
+            memset(row_ptr, 0, row_bytes);
+        } else if (shape.n < cols) {
+            memset(row_ptr + shape.n * elem_size, 0,
+                   (cols - shape.n) * elem_size);
+        }
+    }
+}
+
 static void xsmtame_mmov_m_x_common(CPURISCVState *env, uint32_t md,
                                          target_ulong idx,
                                          target_ulong value,
@@ -275,18 +303,20 @@ static void xsmtame_mmov_m_x_common(CPURISCVState *env, uint32_t md,
 }
 
 static inline void xsmtame_load_tile8_stride(uint8_t *tile,
-                                                  CPURISCVState *env,
-                                                  target_ulong addr,
-                                                  target_ulong stride,
-                                                  uint32_t rows,
-                                                  uint32_t cols,
-                                                  bool transpose)
+                                             CPURISCVState *env,
+                                             uint32_t reg,
+                                             target_ulong addr,
+                                             target_ulong stride,
+                                             uint32_t rows,
+                                             uint32_t cols,
+                                             bool transpose)
 {
+    size_t row_bytes = xsmtame_matrix_row_bytes(env, reg);
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
         for (col = 0; col < cols; col++) {
-            tile[row * cols + col] =
+            tile[row * row_bytes + col] =
                 cpu_ldub_data(env, addr + (transpose ?
                               col * stride + row :
                               row * stride + col));
@@ -295,13 +325,15 @@ static inline void xsmtame_load_tile8_stride(uint8_t *tile,
 }
 
 static inline void xsmtame_store_tile8_stride(const uint8_t *tile,
-                                                   CPURISCVState *env,
-                                                   target_ulong addr,
-                                                   target_ulong stride,
-                                                   uint32_t rows,
-                                                   uint32_t cols,
-                                                   bool transpose)
+                                              CPURISCVState *env,
+                                              uint32_t reg,
+                                              target_ulong addr,
+                                              target_ulong stride,
+                                              uint32_t rows,
+                                              uint32_t cols,
+                                              bool transpose)
 {
+    size_t row_bytes = xsmtame_matrix_row_bytes(env, reg);
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -309,24 +341,26 @@ static inline void xsmtame_store_tile8_stride(const uint8_t *tile,
             cpu_stb_data(env, addr + (transpose ?
                          col * stride + row :
                          row * stride + col),
-                         tile[row * cols + col]);
+                         tile[row * row_bytes + col]);
         }
     }
 }
 
 static inline void xsmtame_load_tile16_stride(uint16_t *tile16,
-                                                   CPURISCVState *env,
-                                                   target_ulong addr,
-                                                   target_ulong stride,
-                                                   uint32_t rows,
-                                                   uint32_t cols,
-                                                   bool transpose)
+                                              CPURISCVState *env,
+                                              uint32_t reg,
+                                              target_ulong addr,
+                                              target_ulong stride,
+                                              uint32_t rows,
+                                              uint32_t cols,
+                                              bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_col_count(env, reg, sizeof(*tile16));
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
         for (col = 0; col < cols; col++) {
-            tile16[row * cols + col] =
+            tile16[row * cols_per_row + col] =
                 cpu_lduw_data(env, addr + (transpose ?
                               col * stride + row * sizeof(*tile16) :
                               row * stride + col * sizeof(*tile16)));
@@ -335,13 +369,15 @@ static inline void xsmtame_load_tile16_stride(uint16_t *tile16,
 }
 
 static inline void xsmtame_store_tile16_stride(const uint16_t *tile16,
-                                                    CPURISCVState *env,
-                                                    target_ulong addr,
-                                                    target_ulong stride,
-                                                    uint32_t rows,
-                                                    uint32_t cols,
-                                                    bool transpose)
+                                               CPURISCVState *env,
+                                               uint32_t reg,
+                                               target_ulong addr,
+                                               target_ulong stride,
+                                               uint32_t rows,
+                                               uint32_t cols,
+                                               bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_col_count(env, reg, sizeof(*tile16));
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -349,24 +385,26 @@ static inline void xsmtame_store_tile16_stride(const uint16_t *tile16,
             cpu_stw_data(env, addr + (transpose ?
                          col * stride + row * sizeof(*tile16) :
                          row * stride + col * sizeof(*tile16)),
-                         tile16[row * cols + col]);
+                         tile16[row * cols_per_row + col]);
         }
     }
 }
 
 static inline void xsmtame_load_tile32_stride(uint32_t *tile32,
-                                                   CPURISCVState *env,
-                                                   target_ulong addr,
-                                                   target_ulong stride,
-                                                   uint32_t rows,
-                                                   uint32_t cols,
-                                                   bool transpose)
+                                              CPURISCVState *env,
+                                              uint32_t reg,
+                                              target_ulong addr,
+                                              target_ulong stride,
+                                              uint32_t rows,
+                                              uint32_t cols,
+                                              bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_col_count(env, reg, sizeof(*tile32));
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
         for (col = 0; col < cols; col++) {
-            tile32[row * cols + col] =
+            tile32[row * cols_per_row + col] =
                 cpu_ldl_data(env, addr + (transpose ?
                              col * stride + row * sizeof(*tile32) :
                              row * stride + col * sizeof(*tile32)));
@@ -375,13 +413,15 @@ static inline void xsmtame_load_tile32_stride(uint32_t *tile32,
 }
 
 static inline void xsmtame_store_tile32_stride(const uint32_t *tile32,
-                                                    CPURISCVState *env,
-                                                    target_ulong addr,
-                                                    target_ulong stride,
-                                                    uint32_t rows,
-                                                    uint32_t cols,
-                                                    bool transpose)
+                                               CPURISCVState *env,
+                                               uint32_t reg,
+                                               target_ulong addr,
+                                               target_ulong stride,
+                                               uint32_t rows,
+                                               uint32_t cols,
+                                               bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_col_count(env, reg, sizeof(*tile32));
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -389,24 +429,26 @@ static inline void xsmtame_store_tile32_stride(const uint32_t *tile32,
             cpu_stl_data(env, addr + (transpose ?
                          col * stride + row * sizeof(*tile32) :
                          row * stride + col * sizeof(*tile32)),
-                         tile32[row * cols + col]);
+                         tile32[row * cols_per_row + col]);
         }
     }
 }
 
 static inline void xsmtame_load_acc8_stride(uint8_t *acc8,
-                                                 CPURISCVState *env,
-                                                 target_ulong addr,
-                                                 target_ulong stride,
-                                                 uint32_t rows,
-                                                 uint32_t cols,
-                                                 bool transpose)
+                                            CPURISCVState *env,
+                                            uint32_t reg,
+                                            target_ulong addr,
+                                            target_ulong stride,
+                                            uint32_t rows,
+                                            uint32_t cols,
+                                            bool transpose)
 {
+    size_t row_bytes = xsmtame_matrix_row_bytes(env, reg);
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
         for (col = 0; col < cols; col++) {
-            acc8[row * cols + col] =
+            acc8[row * row_bytes + col] =
                 cpu_ldub_data(env, addr + (transpose ?
                               col * stride + row :
                               row * stride + col));
@@ -415,13 +457,15 @@ static inline void xsmtame_load_acc8_stride(uint8_t *acc8,
 }
 
 static inline void xsmtame_store_acc8_stride(const uint8_t *acc8,
-                                                  CPURISCVState *env,
-                                                  target_ulong addr,
-                                                  target_ulong stride,
-                                                  uint32_t rows,
-                                                  uint32_t cols,
-                                                  bool transpose)
+                                             CPURISCVState *env,
+                                             uint32_t reg,
+                                             target_ulong addr,
+                                             target_ulong stride,
+                                             uint32_t rows,
+                                             uint32_t cols,
+                                             bool transpose)
 {
+    size_t row_bytes = xsmtame_matrix_row_bytes(env, reg);
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -429,24 +473,26 @@ static inline void xsmtame_store_acc8_stride(const uint8_t *acc8,
             cpu_stb_data(env, addr + (transpose ?
                          col * stride + row :
                          row * stride + col),
-                         acc8[row * cols + col]);
+                         acc8[row * row_bytes + col]);
         }
     }
 }
 
 static inline void xsmtame_load_acc16_stride(uint16_t *acc16,
-                                                  CPURISCVState *env,
-                                                  target_ulong addr,
-                                                  target_ulong stride,
-                                                  uint32_t rows,
-                                                  uint32_t cols,
-                                                  bool transpose)
+                                             CPURISCVState *env,
+                                             uint32_t reg,
+                                             target_ulong addr,
+                                             target_ulong stride,
+                                             uint32_t rows,
+                                             uint32_t cols,
+                                             bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_col_count(env, reg, sizeof(*acc16));
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
         for (col = 0; col < cols; col++) {
-            acc16[row * cols + col] =
+            acc16[row * cols_per_row + col] =
                 cpu_lduw_data(env, addr + (transpose ?
                               col * stride + row * sizeof(*acc16) :
                               row * stride + col * sizeof(*acc16)));
@@ -455,13 +501,15 @@ static inline void xsmtame_load_acc16_stride(uint16_t *acc16,
 }
 
 static inline void xsmtame_store_acc16_stride(const uint16_t *acc16,
-                                                   CPURISCVState *env,
-                                                   target_ulong addr,
-                                                   target_ulong stride,
-                                                   uint32_t rows,
-                                                   uint32_t cols,
-                                                   bool transpose)
+                                              CPURISCVState *env,
+                                              uint32_t reg,
+                                              target_ulong addr,
+                                              target_ulong stride,
+                                              uint32_t rows,
+                                              uint32_t cols,
+                                              bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_col_count(env, reg, sizeof(*acc16));
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -469,24 +517,26 @@ static inline void xsmtame_store_acc16_stride(const uint16_t *acc16,
             cpu_stw_data(env, addr + (transpose ?
                          col * stride + row * sizeof(*acc16) :
                          row * stride + col * sizeof(*acc16)),
-                         acc16[row * cols + col]);
+                         acc16[row * cols_per_row + col]);
         }
     }
 }
 
 static inline void xsmtame_load_acc32_stride(uint32_t *acc32,
-                                                  CPURISCVState *env,
-                                                  target_ulong addr,
-                                                  target_ulong stride,
-                                                  uint32_t rows,
-                                                  uint32_t cols,
-                                                  bool transpose)
+                                             CPURISCVState *env,
+                                             uint32_t reg,
+                                             target_ulong addr,
+                                             target_ulong stride,
+                                             uint32_t rows,
+                                             uint32_t cols,
+                                             bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_col_count(env, reg, sizeof(*acc32));
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
         for (col = 0; col < cols; col++) {
-            acc32[row * cols + col] =
+            acc32[row * cols_per_row + col] =
                 cpu_ldl_data(env, addr + (transpose ?
                               col * stride + row * sizeof(*acc32) :
                               row * stride + col * sizeof(*acc32)));
@@ -495,13 +545,15 @@ static inline void xsmtame_load_acc32_stride(uint32_t *acc32,
 }
 
 static inline void xsmtame_store_acc32_stride(const uint32_t *acc32,
-                                                   CPURISCVState *env,
-                                                   target_ulong addr,
-                                                   target_ulong stride,
-                                                   uint32_t rows,
-                                                   uint32_t cols,
-                                                   bool transpose)
+                                              CPURISCVState *env,
+                                              uint32_t reg,
+                                              target_ulong addr,
+                                              target_ulong stride,
+                                              uint32_t rows,
+                                              uint32_t cols,
+                                              bool transpose)
 {
+    size_t cols_per_row = xsmtame_matrix_col_count(env, reg, sizeof(*acc32));
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -509,7 +561,7 @@ static inline void xsmtame_store_acc32_stride(const uint32_t *acc32,
             cpu_stl_data(env, addr + (transpose ?
                          col * stride + row * sizeof(*acc32) :
                          row * stride + col * sizeof(*acc32)),
-                         acc32[row * cols + col]);
+                         acc32[row * cols_per_row + col]);
         }
     }
 }
@@ -695,24 +747,29 @@ static void xsmtame_mmacc_w_b_common(CPURISCVState *env, uint32_t ad,
     const uint8_t *tA = (const uint8_t *)xsmtame_tile8s_ptr(env, ms1);
     const uint8_t *tBT = (const uint8_t *)xsmtame_tile8s_ptr(env, ms2);
     int32_t *acc = (int32_t *)xsmtame_acc32_ptr(env, ad);
+    size_t a_row_bytes = xsmtame_matrix_row_bytes(env, ms1);
+    size_t b_row_bytes = xsmtame_matrix_row_bytes(env, ms2);
+    size_t acc_cols = xsmtame_matrix_col_count(env, ad, sizeof(*acc));
     uint32_t m, n, k;
 
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
             int32_t sum = 0;
             for (k = 0; k < shape.k; k++) {
-                uint32_t a_raw = tA[m * shape.k + k];
-                uint32_t b_raw = tBT[n * shape.k + k];
+                uint32_t a_raw = tA[m * a_row_bytes + k];
+                uint32_t b_raw = tBT[n * b_row_bytes + k];
                 int32_t a = ms1_unsigned ? (int32_t)a_raw : (int32_t)(int8_t)a_raw;
                 int32_t b = ms2_unsigned ? (int32_t)b_raw : (int32_t)(int8_t)b_raw;
 
                 sum += a * b;
             }
-            acc[m * shape.n + n] = xsmtame_acc_add_i32(env,
-                                                       acc[m * shape.n + n],
+            acc[m * acc_cols + n] = xsmtame_acc_add_i32(env,
+                                                       acc[m * acc_cols + n],
                                                        sum);
         }
     }
+
+    xsmtame_zero_acc_inactive_region(env, ad, sizeof(*acc));
 }
 
 void HELPER(xsmtame_mmaccu_w_b)(CPURISCVState *env, uint32_t ad,
@@ -1219,22 +1276,27 @@ static void xsmtame_mfmacc16_common(CPURISCVState *env, uint32_t md,
     const uint16_t *tA = xsmtame_tile16_ptr(env, ms1);
     const uint16_t *tBT = xsmtame_tile16_ptr(env, ms2);
     uint32_t *acc = xsmtame_acc32_ptr(env, md);
+    size_t a_cols = xsmtame_matrix_col_count(env, ms1, sizeof(*tA));
+    size_t b_cols = xsmtame_matrix_col_count(env, ms2, sizeof(*tBT));
+    size_t acc_cols = xsmtame_matrix_col_count(env, md, sizeof(*acc));
     float_status *fpst = &env->fp_status;
     uint32_t m, n;
 
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
-            float32 c = make_float32(acc[m * shape.n + n]);
-            c = xsmtame_mfmacc_cell16_internal30(&tA[m * shape.k],
-                                                      &tBT[n * shape.k],
+            float32 c = make_float32(acc[m * acc_cols + n]);
+            c = xsmtame_mfmacc_cell16_internal30(&tA[m * a_cols],
+                                                      &tBT[n * b_cols],
                                                       shape.k,
                                                       c,
                                                       mul_to_internal,
                                                       fallback_convert,
                                                       fpst);
-            acc[m * shape.n + n] = float32_val(c);
+            acc[m * acc_cols + n] = float32_val(c);
         }
     }
+
+    xsmtame_zero_acc_inactive_region(env, md, sizeof(*acc));
 }
 
 static void xsmtame_mfmacc8_common(CPURISCVState *env, uint32_t md,
@@ -1249,22 +1311,27 @@ static void xsmtame_mfmacc8_common(CPURISCVState *env, uint32_t md,
     const uint8_t *tA = (const uint8_t *)xsmtame_tile_ptr(env, ms1);
     const uint8_t *tBT = (const uint8_t *)xsmtame_tile_ptr(env, ms2);
     uint32_t *acc = xsmtame_acc32_ptr(env, md);
+    size_t a_row_bytes = xsmtame_matrix_row_bytes(env, ms1);
+    size_t b_row_bytes = xsmtame_matrix_row_bytes(env, ms2);
+    size_t acc_cols = xsmtame_matrix_col_count(env, md, sizeof(*acc));
     float_status *fpst = &env->fp_status;
     uint32_t m, n;
 
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
-            float32 c = make_float32(acc[m * shape.n + n]);
-            c = xsmtame_mfmacc_cell8_internal30(&tA[m * shape.k],
-                                                     &tBT[n * shape.k],
+            float32 c = make_float32(acc[m * acc_cols + n]);
+            c = xsmtame_mfmacc_cell8_internal30(&tA[m * a_row_bytes],
+                                                     &tBT[n * b_row_bytes],
                                                      shape.k,
                                                      c,
                                                      mul_to_internal,
                                                      fallback_convert,
                                                      fpst);
-            acc[m * shape.n + n] = float32_val(c);
+            acc[m * acc_cols + n] = float32_val(c);
         }
     }
+
+    xsmtame_zero_acc_inactive_region(env, md, sizeof(*acc));
 }
 
 static void xsmtame_mfmacc16_acc16_common(CPURISCVState *env, uint32_t md,
@@ -1281,22 +1348,27 @@ static void xsmtame_mfmacc16_acc16_common(CPURISCVState *env, uint32_t md,
     const uint16_t *tA = xsmtame_tile16_ptr(env, ms1);
     const uint16_t *tBT = xsmtame_tile16_ptr(env, ms2);
     uint16_t *acc = xsmtame_acc16_ptr(env, md);
+    size_t a_cols = xsmtame_matrix_col_count(env, ms1, sizeof(*tA));
+    size_t b_cols = xsmtame_matrix_col_count(env, ms2, sizeof(*tBT));
+    size_t acc_cols = xsmtame_matrix_col_count(env, md, sizeof(*acc));
     float_status *fpst = &env->fp_status;
     uint32_t m, n;
 
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
-            float32 c = acc_to_f32(acc[m * shape.n + n], fpst);
-            c = xsmtame_mfmacc_cell16_internal30(&tA[m * shape.k],
-                                                      &tBT[n * shape.k],
+            float32 c = acc_to_f32(acc[m * acc_cols + n], fpst);
+            c = xsmtame_mfmacc_cell16_internal30(&tA[m * a_cols],
+                                                      &tBT[n * b_cols],
                                                       shape.k,
                                                       c,
                                                       mul_to_internal,
                                                       xsmtame_mfmacc_fp16_to_f32,
                                                       fpst);
-            acc[m * shape.n + n] = f32_to_acc(c, fpst);
+            acc[m * acc_cols + n] = f32_to_acc(c, fpst);
         }
     }
+
+    xsmtame_zero_acc_inactive_region(env, md, sizeof(*acc));
 }
 
 static void xsmtame_mfmacc8_acc16_common(CPURISCVState *env, uint32_t md,
@@ -1315,22 +1387,27 @@ static void xsmtame_mfmacc8_acc16_common(CPURISCVState *env, uint32_t md,
     const uint8_t *tA = (const uint8_t *)xsmtame_tile_ptr(env, ms1);
     const uint8_t *tBT = (const uint8_t *)xsmtame_tile_ptr(env, ms2);
     uint16_t *acc = xsmtame_acc16_ptr(env, md);
+    size_t a_row_bytes = xsmtame_matrix_row_bytes(env, ms1);
+    size_t b_row_bytes = xsmtame_matrix_row_bytes(env, ms2);
+    size_t acc_cols = xsmtame_matrix_col_count(env, md, sizeof(*acc));
     float_status *fpst = &env->fp_status;
     uint32_t m, n;
 
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
-            float32 c = acc_to_f32(acc[m * shape.n + n], fpst);
-            c = xsmtame_mfmacc_cell8_internal30(&tA[m * shape.k],
-                                                     &tBT[n * shape.k],
+            float32 c = acc_to_f32(acc[m * acc_cols + n], fpst);
+            c = xsmtame_mfmacc_cell8_internal30(&tA[m * a_row_bytes],
+                                                     &tBT[n * b_row_bytes],
                                                      shape.k,
                                                      c,
                                                      mul_to_internal,
                                                      fallback_convert,
                                                      fpst);
-            acc[m * shape.n + n] = f32_to_acc(c, fpst);
+            acc[m * acc_cols + n] = f32_to_acc(c, fpst);
         }
     }
+
+    xsmtame_zero_acc_inactive_region(env, md, sizeof(*acc));
 }
 
 void HELPER(xsmtame_mfmacc_h_e5)(CPURISCVState *env, uint32_t md,

@@ -45,12 +45,12 @@ static inline uint32_t xsmtsfu_host_to_f32(float f)
     return u.i;
 }
 
-static void xsmtsfu_tile32(CPURISCVState *env, uint32_t vd,
-                           uint32_t vs2,
+static void xsmtsfu_tile32(CPURISCVState *env, uint32_t md,
+                           uint32_t ms2,
                            uint32_t (*op)(uint32_t, float_status *))
 {
-    uint32_t *dst = (uint32_t *)xsmtsfu_tile_ptr(env, vd);
-    const uint32_t *src = (const uint32_t *)xsmtsfu_tile_ptr(env, vs2);
+    uint32_t *dst = (uint32_t *)xsmtsfu_tile_ptr(env, md);
+    const uint32_t *src = (const uint32_t *)xsmtsfu_tile_ptr(env, ms2);
     uint32_t elems = xsmtsfu_env_tlenb(env) / sizeof(uint32_t);
     float_status *fpst = &env->fp_status;
     uint32_t i;
@@ -82,22 +82,22 @@ static uint32_t xsmtsfu_rcp(uint32_t raw, float_status *fpst)
                                    make_float32(raw), fpst));
 }
 
-void HELPER(xsmtsfu_vfex2_v)(CPURISCVState *env, uint32_t vd, uint32_t vs2)
+void HELPER(xsmtsfu_mfex2_s)(CPURISCVState *env, uint32_t md, uint32_t ms2)
 {
-    xsmtsfu_tile32(env, vd, vs2, xsmtsfu_exp2);
+    xsmtsfu_tile32(env, md, ms2, xsmtsfu_exp2);
 }
 
-void HELPER(xsmtsfu_vftanh_v)(CPURISCVState *env, uint32_t vd, uint32_t vs2)
+void HELPER(xsmtsfu_mftanh_s)(CPURISCVState *env, uint32_t md, uint32_t ms2)
 {
-    xsmtsfu_tile32(env, vd, vs2, xsmtsfu_tanh);
+    xsmtsfu_tile32(env, md, ms2, xsmtsfu_tanh);
 }
 
-void HELPER(xsmtsfu_vflg2_v)(CPURISCVState *env, uint32_t vd, uint32_t vs2)
+void HELPER(xsmtsfu_mflg2_s)(CPURISCVState *env, uint32_t md, uint32_t ms2)
 {
-    xsmtsfu_tile32(env, vd, vs2, xsmtsfu_log2);
+    xsmtsfu_tile32(env, md, ms2, xsmtsfu_log2);
 }
 
-void HELPER(xsmtsfu_vfrcp_v)(CPURISCVState *env, uint32_t vd, uint32_t vs2)
+void HELPER(xsmtsfu_mfrcp_s)(CPURISCVState *env, uint32_t md, uint32_t ms2)
 {
-    xsmtsfu_tile32(env, vd, vs2, xsmtsfu_rcp);
+    xsmtsfu_tile32(env, md, ms2, xsmtsfu_rcp);
 }
