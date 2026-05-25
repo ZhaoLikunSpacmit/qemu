@@ -500,7 +500,8 @@ static inline void xsmtame_load_acc8_stride(uint8_t *acc8,
                                             uint32_t cols,
                                             bool transpose)
 {
-    size_t row_bytes = xsmtame_matrix_layout(env, reg, 0).row_bytes;
+    size_t row_bytes = xsmtame_matrix_layout(env, reg + AME_NR_TILES,
+                                             0).row_bytes;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -522,7 +523,8 @@ static inline void xsmtame_store_acc8_stride(const uint8_t *acc8,
                                              uint32_t cols,
                                              bool transpose)
 {
-    size_t row_bytes = xsmtame_matrix_layout(env, reg, 0).row_bytes;
+    size_t row_bytes = xsmtame_matrix_layout(env, reg + AME_NR_TILES,
+                                             0).row_bytes;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -544,7 +546,8 @@ static inline void xsmtame_load_acc16_stride(uint16_t *acc16,
                                              uint32_t cols,
                                              bool transpose)
 {
-    size_t cols_per_row = xsmtame_matrix_layout(env, reg, sizeof(*acc16)).cols;
+    size_t cols_per_row = xsmtame_matrix_layout(env, reg + AME_NR_TILES,
+                                                sizeof(*acc16)).cols;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -566,7 +569,8 @@ static inline void xsmtame_store_acc16_stride(const uint16_t *acc16,
                                               uint32_t cols,
                                               bool transpose)
 {
-    size_t cols_per_row = xsmtame_matrix_layout(env, reg, sizeof(*acc16)).cols;
+    size_t cols_per_row = xsmtame_matrix_layout(env, reg + AME_NR_TILES,
+                                                sizeof(*acc16)).cols;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -588,7 +592,8 @@ static inline void xsmtame_load_acc32_stride(uint32_t *acc32,
                                              uint32_t cols,
                                              bool transpose)
 {
-    size_t cols_per_row = xsmtame_matrix_layout(env, reg, sizeof(*acc32)).cols;
+    size_t cols_per_row = xsmtame_matrix_layout(env, reg + AME_NR_TILES,
+                                                sizeof(*acc32)).cols;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
@@ -610,7 +615,8 @@ static inline void xsmtame_store_acc32_stride(const uint32_t *acc32,
                                               uint32_t cols,
                                               bool transpose)
 {
-    size_t cols_per_row = xsmtame_matrix_layout(env, reg, sizeof(*acc32)).cols;
+    size_t cols_per_row = xsmtame_matrix_layout(env, reg + AME_NR_TILES,
+                                                sizeof(*acc32)).cols;
     uint32_t row, col;
 
     for (row = 0; row < rows; row++) {
