@@ -62,7 +62,8 @@ static void xsmtsfu_tile32(CPURISCVState *env, uint32_t md,
 
 static uint32_t xsmtsfu_exp2(uint32_t raw, float_status *fpst)
 {
-    return float32_val(float32_exp2(make_float32(raw), fpst));
+    (void)fpst;
+    return xsmtsfu_host_to_f32(exp2f(xsmtsfu_f32_to_host(raw)));
 }
 
 static uint32_t xsmtsfu_tanh(uint32_t raw, float_status *fpst)
@@ -73,7 +74,8 @@ static uint32_t xsmtsfu_tanh(uint32_t raw, float_status *fpst)
 
 static uint32_t xsmtsfu_log2(uint32_t raw, float_status *fpst)
 {
-    return float32_val(float32_log2(make_float32(raw), fpst));
+    (void)fpst;
+    return xsmtsfu_host_to_f32(log2f(xsmtsfu_f32_to_host(raw)));
 }
 
 static uint32_t xsmtsfu_rcp(uint32_t raw, float_status *fpst)
