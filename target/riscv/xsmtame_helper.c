@@ -1060,8 +1060,15 @@ static bool xsmtame_mfmacc_mul_float_to_internal30(uint16_t ui_a,
     frac_bits_prod = frac_bits_a + frac_bits_b;
 
     if (sig_prod & (((uint64_t)1) << (frac_bits_prod + 1))) {
+        /*
+         * The product is already normalized into [2, 4), so bump the
+         * exponent and account for the extra leading bit in the later
+         * internal30 scaling. Do not right shift `sig_prod` here: that would
+         * quantize an otherwise exact product (for example 1479 * 1461) one
+         * step too early and can produce a 0x20 FP32 error in `mfmacc.s.h`.
+         */
         ++out->exp;
-        sig_prod = xsmtame_mfmacc_shrjam64(sig_prod, 1);
+        ++frac_bits_prod;
     }
 
     if (frac_bits_prod < 26) {
