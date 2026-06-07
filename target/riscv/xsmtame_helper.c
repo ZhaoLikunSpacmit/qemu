@@ -1926,6 +1926,60 @@ void HELPER(xsmtame_mmovd_m_x)(CPURISCVState *env, uint32_t md,
     xsmtame_mmov_m_x_common(env, md, idx, value, 8);
 }
 
+static void xsmtame_mdup_common(CPURISCVState *env, uint32_t md,
+                                target_ulong value, size_t elem_size)
+{
+    size_t reg_size;
+    uint8_t *dst = xsmtame_matrix_ptr(env, md, &reg_size);
+    size_t off;
+
+    g_assert(elem_size != 0);
+    g_assert(reg_size % elem_size == 0);
+
+    for (off = 0; off < reg_size; off += elem_size) {
+        switch (elem_size) {
+        case 1:
+            stb_p(dst + off, value);
+            break;
+        case 2:
+            stw_le_p(dst + off, value);
+            break;
+        case 4:
+            stl_le_p(dst + off, value);
+            break;
+        case 8:
+            stq_le_p(dst + off, value);
+            break;
+        default:
+            g_assert_not_reached();
+        }
+    }
+}
+
+void HELPER(xsmtame_mdupb_m_x)(CPURISCVState *env, uint32_t md,
+                               target_ulong value)
+{
+    xsmtame_mdup_common(env, md, value, 1);
+}
+
+void HELPER(xsmtame_mduph_m_x)(CPURISCVState *env, uint32_t md,
+                               target_ulong value)
+{
+    xsmtame_mdup_common(env, md, value, 2);
+}
+
+void HELPER(xsmtame_mdupw_m_x)(CPURISCVState *env, uint32_t md,
+                               target_ulong value)
+{
+    xsmtame_mdup_common(env, md, value, 4);
+}
+
+void HELPER(xsmtame_mdupd_m_x)(CPURISCVState *env, uint32_t md,
+                               target_ulong value)
+{
+    xsmtame_mdup_common(env, md, value, 8);
+}
+
 static void xsmtame_mpack_common(CPURISCVState *env, uint32_t md,
                                       uint32_t ms2, uint32_t ms1,
                                       bool high1, bool high2)
@@ -1954,6 +2008,62 @@ static void xsmtame_mpack_common(CPURISCVState *env, uint32_t md,
         memcpy(tmp + off + half,
                src2 + off + (high2 ? half : 0),
                half);
+    }
+
+    memcpy(dst, tmp, reg_size);
+}
+
+static void xsmtame_mrbc_common(CPURISCVState *env, uint32_t md,
+                                uint32_t ms1, uint32_t amount)
+{
+    size_t reg_size;
+    uint8_t tmp[AME_ACC_LEN_B];
+    uint8_t *dst = xsmtame_matrix_ptr(env, md, &reg_size);
+    uint8_t *src = xsmtame_matrix_ptr(env, ms1, NULL);
+    size_t row_bytes = xsmtame_matrix_layout(env, md, 0).row_bytes;
+    size_t rows = reg_size / row_bytes;
+    size_t row;
+
+    xsmtame_validate_same_matrix_layout(env, md, ms1);
+
+    if (rows != 0) {
+        amount &= rows - 1;
+    }
+
+    for (row = 0; row < rows; row++) {
+        memcpy(tmp + row * row_bytes, src + amount * row_bytes, row_bytes);
+    }
+
+    memcpy(dst, tmp, reg_size);
+}
+
+static void xsmtame_mcbc_common(CPURISCVState *env, uint32_t md,
+                                uint32_t ms1, uint32_t amount,
+                                size_t elem_size)
+{
+    size_t reg_size;
+    uint8_t tmp[AME_ACC_LEN_B];
+    uint8_t *dst = xsmtame_matrix_ptr(env, md, &reg_size);
+    uint8_t *src = xsmtame_matrix_ptr(env, ms1, NULL);
+    size_t row_bytes = xsmtame_matrix_layout(env, md, 0).row_bytes;
+    size_t rows = reg_size / row_bytes;
+    size_t cols = xsmtame_matrix_layout(env, md, elem_size).cols;
+    size_t row;
+    size_t col;
+
+    xsmtame_validate_same_matrix_layout(env, md, ms1);
+
+    if (cols != 0) {
+        amount &= cols - 1;
+    }
+
+    for (row = 0; row < rows; row++) {
+        uint8_t *dst_row = tmp + row * row_bytes;
+        uint8_t *src_elem = src + row * row_bytes + amount * elem_size;
+
+        for (col = 0; col < cols; col++) {
+            memcpy(dst_row + col * elem_size, src_elem, elem_size);
+        }
     }
 
     memcpy(dst, tmp, reg_size);
@@ -2093,6 +2203,12 @@ void HELPER(xsmtame_mcslidedown_w)(CPURISCVState *env, uint32_t md,
     xsmtame_mcslide_common(env, md, ms1, amount, 4, false);
 }
 
+void HELPER(xsmtame_mcslidedown_d)(CPURISCVState *env, uint32_t md,
+                                        uint32_t ms1, uint32_t amount)
+{
+    xsmtame_mcslide_common(env, md, ms1, amount, 8, false);
+}
+
 void HELPER(xsmtame_mcslideup_b)(CPURISCVState *env, uint32_t md,
                                       uint32_t ms1, uint32_t amount)
 {
@@ -2109,6 +2225,42 @@ void HELPER(xsmtame_mcslideup_w)(CPURISCVState *env, uint32_t md,
                                       uint32_t ms1, uint32_t amount)
 {
     xsmtame_mcslide_common(env, md, ms1, amount, 4, true);
+}
+
+void HELPER(xsmtame_mcslideup_d)(CPURISCVState *env, uint32_t md,
+                                      uint32_t ms1, uint32_t amount)
+{
+    xsmtame_mcslide_common(env, md, ms1, amount, 8, true);
+}
+
+void HELPER(xsmtame_mrbca_mv_i)(CPURISCVState *env, uint32_t md,
+                                     uint32_t ms1, uint32_t amount)
+{
+    xsmtame_mrbc_common(env, md, ms1, amount);
+}
+
+void HELPER(xsmtame_mcbcab_mv_i)(CPURISCVState *env, uint32_t md,
+                                      uint32_t ms1, uint32_t amount)
+{
+    xsmtame_mcbc_common(env, md, ms1, amount, 1);
+}
+
+void HELPER(xsmtame_mcbcah_mv_i)(CPURISCVState *env, uint32_t md,
+                                      uint32_t ms1, uint32_t amount)
+{
+    xsmtame_mcbc_common(env, md, ms1, amount, 2);
+}
+
+void HELPER(xsmtame_mcbcaw_mv_i)(CPURISCVState *env, uint32_t md,
+                                      uint32_t ms1, uint32_t amount)
+{
+    xsmtame_mcbc_common(env, md, ms1, amount, 4);
+}
+
+void HELPER(xsmtame_mcbcad_mv_i)(CPURISCVState *env, uint32_t md,
+                                      uint32_t ms1, uint32_t amount)
+{
+    xsmtame_mcbc_common(env, md, ms1, amount, 8);
 }
 
 /*
