@@ -884,21 +884,44 @@ static inline uint16_t xsmtame_mfmacc_f32_to_bf16_bits(float32 raw,
     return (uint16_t)float32_to_bfloat16(raw, fpst);
 }
 
-static inline float32 xsmtame_mfmacc_fp8_to_f32(uint8_t raw,
-                                                     uint8_t exp_bits,
-                                                     uint8_t frac_bits,
-                                                     int16_t exp_bias,
+static inline float32 xsmtame_mfmacc_e4_to_f32(uint8_t raw,
                                                      float_status *fpst)
 {
-    uint8_t exp_mask = (1u << exp_bits) - 1;
-    uint8_t frac_mask = (1u << frac_bits) - 1;
-    bool sign = raw >> (exp_bits + frac_bits);
-    uint8_t exp = (raw >> frac_bits) & exp_mask;
-    uint8_t frac = raw & frac_mask;
+    bool sign = raw >> 7;
+    uint8_t exp = (raw >> 3) & 0x0f;
+    uint8_t frac = raw & 0x07;
     int16_t unbiased_exp;
     int32_t sig;
 
-    if (exp == exp_mask) {
+    if (exp == 0x0f && frac == 0x07) {
+        return float32_default_nan(fpst);
+    }
+
+    if (!exp) {
+        if (!frac) {
+            return make_float32(sign ? 0x80000000u : 0);
+        }
+        unbiased_exp = -6;
+        sig = frac;
+    } else {
+        unbiased_exp = exp - 7;
+        sig = 0x08 | frac;
+    }
+
+    return int32_to_float32_scalbn(sign ? -sig : sig,
+                                  unbiased_exp - 3, fpst);
+}
+
+static inline float32 xsmtame_mfmacc_e5_to_f32(uint8_t raw,
+                                                     float_status *fpst)
+{
+    bool sign = raw >> 7;
+    uint8_t exp = (raw >> 2) & 0x1f;
+    uint8_t frac = raw & 0x03;
+    int16_t unbiased_exp;
+    int32_t sig;
+
+    if (exp == 0x1f) {
         if (frac) {
             return float32_default_nan(fpst);
         }
@@ -909,27 +932,15 @@ static inline float32 xsmtame_mfmacc_fp8_to_f32(uint8_t raw,
         if (!frac) {
             return make_float32(sign ? 0x80000000u : 0);
         }
-        unbiased_exp = 1 - exp_bias;
+        unbiased_exp = -14;
         sig = frac;
     } else {
-        unbiased_exp = exp - exp_bias;
-        sig = (1u << frac_bits) | frac;
+        unbiased_exp = exp - 15;
+        sig = 0x04 | frac;
     }
 
     return int32_to_float32_scalbn(sign ? -sig : sig,
-                                  unbiased_exp - frac_bits, fpst);
-}
-
-static inline float32 xsmtame_mfmacc_e4_to_f32(uint8_t raw,
-                                                     float_status *fpst)
-{
-    return xsmtame_mfmacc_fp8_to_f32(raw, 4, 3, 7, fpst);
-}
-
-static inline float32 xsmtame_mfmacc_e5_to_f32(uint8_t raw,
-                                                     float_status *fpst)
-{
-    return xsmtame_mfmacc_fp8_to_f32(raw, 5, 2, 15, fpst);
+                                  unbiased_exp - 2, fpst);
 }
 
 typedef struct AMEMfmaccInternal30 {
@@ -1052,8 +1063,8 @@ static AMEMfmaccSpecial xsmtame_mfmacc_classify_e5(uint8_t ui)
         .sign = ui >> 7,
         .is_zero = exp == 0 && frac == 0,
         .is_inf = exp == 0x1f && frac == 0,
-        .is_qnan = exp == 0x1f && frac != 0 && (frac & 0x02) != 0,
-        .is_snan = exp == 0x1f && frac != 0 && (frac & 0x02) == 0,
+        .is_qnan = exp == 0x1f && frac != 0,
+        .is_snan = false,
     };
 }
 
@@ -1213,40 +1224,63 @@ static bool xsmtame_mfmacc_decode_float(uint16_t ui,
     return true;
 }
 
-static bool xsmtame_mfmacc_mul_float_to_internal30(uint16_t ui_a,
-                                                        uint8_t exp_bits_a,
-                                                        uint8_t frac_bits_a,
-                                                        int16_t exp_bias_a,
-                                                        uint16_t ui_b,
-                                                        uint8_t exp_bits_b,
-                                                        uint8_t frac_bits_b,
-                                                        int16_t exp_bias_b,
-                                                        AMEMfmaccInternal30 *out)
+static bool xsmtame_mfmacc_decode_e4(uint8_t ui,
+                                          AMEMfmaccDecodedFloat *out)
 {
-    AMEMfmaccDecodedFloat a;
-    AMEMfmaccDecodedFloat b;
-    uint64_t sig_prod;
-    uint8_t frac_bits_prod;
+    uint16_t exp = (ui >> 3) & 0x0f;
+    uint16_t frac = ui & 0x07;
+    int16_t shift_dist;
 
-    if (!xsmtame_mfmacc_decode_float(ui_a, exp_bits_a, frac_bits_a,
-                                          exp_bias_a, &a) ||
-        !xsmtame_mfmacc_decode_float(ui_b, exp_bits_b, frac_bits_b,
-                                          exp_bias_b, &b)) {
-        return false;
-    }
-
-    out->sign = a.sign ^ b.sign;
+    out->sign = ui >> 7;
     out->exp = 0;
     out->sig = 0;
     out->is_zero = false;
 
-    if (a.is_zero || b.is_zero) {
+    if (exp == 0x0f && frac == 0x07) {
+        return false;
+    }
+    if (!exp) {
+        if (!frac) {
+            out->is_zero = true;
+            return true;
+        }
+        shift_dist = 0;
+        while (frac < 0x08) {
+            frac <<= 1;
+            ++shift_dist;
+        }
+        out->exp = -6 - shift_dist;
+        out->sig = frac;
+        return true;
+    }
+
+    out->exp = (int16_t)exp - 7;
+    out->sig = 0x08 | frac;
+    return true;
+}
+
+static bool xsmtame_mfmacc_mul_decoded_to_internal30(
+    const AMEMfmaccDecodedFloat *a,
+    uint8_t frac_bits_a,
+    const AMEMfmaccDecodedFloat *b,
+    uint8_t frac_bits_b,
+    AMEMfmaccInternal30 *out)
+{
+    uint64_t sig_prod;
+    uint8_t frac_bits_prod;
+
+    out->sign = a->sign ^ b->sign;
+    out->exp = 0;
+    out->sig = 0;
+    out->is_zero = false;
+
+    if (a->is_zero || b->is_zero) {
         out->is_zero = true;
         return true;
     }
 
-    sig_prod = (uint64_t)a.sig * (uint64_t)b.sig;
-    out->exp = a.exp + b.exp;
+    sig_prod = (uint64_t)a->sig * (uint64_t)b->sig;
+    out->exp = a->exp + b->exp;
     frac_bits_prod = frac_bits_a + frac_bits_b;
 
     if (sig_prod & (((uint64_t)1) << (frac_bits_prod + 1))) {
@@ -1272,6 +1306,31 @@ static bool xsmtame_mfmacc_mul_float_to_internal30(uint16_t ui_a,
     return true;
 }
 
+static bool xsmtame_mfmacc_mul_float_to_internal30(uint16_t ui_a,
+                                                        uint8_t exp_bits_a,
+                                                        uint8_t frac_bits_a,
+                                                        int16_t exp_bias_a,
+                                                        uint16_t ui_b,
+                                                        uint8_t exp_bits_b,
+                                                        uint8_t frac_bits_b,
+                                                        int16_t exp_bias_b,
+                                                        AMEMfmaccInternal30 *out)
+{
+    AMEMfmaccDecodedFloat a;
+    AMEMfmaccDecodedFloat b;
+
+    if (!xsmtame_mfmacc_decode_float(ui_a, exp_bits_a, frac_bits_a,
+                                          exp_bias_a, &a) ||
+        !xsmtame_mfmacc_decode_float(ui_b, exp_bits_b, frac_bits_b,
+                                          exp_bias_b, &b)) {
+        return false;
+    }
+
+    return xsmtame_mfmacc_mul_decoded_to_internal30(&a, frac_bits_a,
+                                                         &b, frac_bits_b,
+                                                         out);
+}
+
 static inline bool xsmtame_mfmacc_mul_f16_to_internal30(uint16_t ui_a,
                                                               uint16_t ui_b,
                                                               AMEMfmaccInternal30 *out)
@@ -1294,9 +1353,16 @@ static inline bool xsmtame_mfmacc_mul_e4_to_internal30(uint8_t ui_a,
                                                              uint8_t ui_b,
                                                              AMEMfmaccInternal30 *out)
 {
-    return xsmtame_mfmacc_mul_float_to_internal30(ui_a, 4, 3, 7,
-                                                       ui_b, 4, 3, 7,
-                                                       out);
+    AMEMfmaccDecodedFloat a;
+    AMEMfmaccDecodedFloat b;
+
+    if (!xsmtame_mfmacc_decode_e4(ui_a, &a) ||
+        !xsmtame_mfmacc_decode_e4(ui_b, &b)) {
+        return false;
+    }
+
+    return xsmtame_mfmacc_mul_decoded_to_internal30(&a, 3,
+                                                    &b, 3, out);
 }
 
 static inline bool xsmtame_mfmacc_mul_e5_to_internal30(uint8_t ui_a,
