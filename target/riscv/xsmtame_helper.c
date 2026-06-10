@@ -975,6 +975,11 @@ typedef struct AMEMfmaccSpecialEval {
     bool neg_zero_seen;
 } AMEMfmaccSpecialEval;
 
+enum {
+    XSMTAME_MFMACC_MAX_INTERNAL_K_16 = 2,
+    XSMTAME_MFMACC_MAX_INTERNAL_K_8 = 4,
+};
+
 static inline uint32_t xsmtame_mfmacc_shrjam32(uint32_t a, uint8_t dist)
 {
     if (!dist) {
@@ -1510,6 +1515,11 @@ static float32 xsmtame_mfmacc_add_internal30_to_f32_final(
     return z;
 }
 
+/*
+ * Large-k fallback only. Special values are screened before these helpers are
+ * reached; the remaining fallback is for dot products longer than the direct
+ * internal30 finite path models.
+ */
 static float32 xsmtame_mfmacc_reference_dot16(const uint16_t *lhs,
                                                    const uint16_t *rhs,
                                                    uint8_t k_cols,
@@ -1544,17 +1554,18 @@ static float32 xsmtame_mfmacc_reference_dot8(const uint8_t *lhs,
     return c;
 }
 
-static float32 xsmtame_mfmacc_cell16_internal30(const uint16_t *lhs,
-                                                     const uint16_t *rhs,
-                                                     uint8_t k_cols,
-                                                     float32 c,
-                                                     bool (*mul_to_internal)(uint16_t,
-                                                                             uint16_t,
-                                                                             AMEMfmaccInternal30 *),
-                                                     float32 (*fallback_convert)(uint16_t,
-                                                                                 float_status *),
-                                                     AMEMfmaccSpecial (*classify)(uint16_t),
-                                                     float_status *fpst)
+static float32 xsmtame_mfmacc_cell16(const uint16_t *lhs,
+                                     const uint16_t *rhs,
+                                     uint8_t k_cols,
+                                     uint8_t max_internal_k,
+                                     float32 c,
+                                     bool (*mul_to_internal)(uint16_t,
+                                                             uint16_t,
+                                                             AMEMfmaccInternal30 *),
+                                     float32 (*fallback_convert)(uint16_t,
+                                                                 float_status *),
+                                     AMEMfmaccSpecial (*classify)(uint16_t),
+                                     float_status *fpst)
 {
     AMEMfmaccInternal30 acc_int;
     AMEMfmaccInternal30 prod_list[4];
@@ -1578,33 +1589,31 @@ static float32 xsmtame_mfmacc_cell16_internal30(const uint16_t *lhs,
         return special_z;
     }
 
-    if (k_cols > 4) {
+    if (k_cols > max_internal_k) {
         return xsmtame_mfmacc_reference_dot16(lhs, rhs, k_cols, c,
                                                    fallback_convert, fpst);
     }
 
     for (k = 0; k < k_cols; ++k) {
-        if (!mul_to_internal(lhs[k], rhs[k], &prod_list[k])) {
-            return xsmtame_mfmacc_reference_dot16(lhs, rhs, k_cols, c,
-                                                       fallback_convert, fpst);
-        }
+        mul_to_internal(lhs[k], rhs[k], &prod_list[k]);
     }
 
     xsmtame_mfmacc_add_internal30_unified(prod_list, k_cols, &acc_int);
     return xsmtame_mfmacc_add_internal30_to_f32_final(&acc_int, c, fpst);
 }
 
-static float32 xsmtame_mfmacc_cell8_internal30(const uint8_t *lhs,
-                                                    const uint8_t *rhs,
-                                                    uint8_t k_cols,
-                                                    float32 c,
-                                                    bool (*mul_to_internal)(uint8_t,
-                                                                            uint8_t,
-                                                                            AMEMfmaccInternal30 *),
-                                                    float32 (*fallback_convert)(uint8_t,
-                                                                                float_status *),
-                                                    AMEMfmaccSpecial (*classify)(uint8_t),
-                                                    float_status *fpst)
+static float32 xsmtame_mfmacc_cell8(const uint8_t *lhs,
+                                    const uint8_t *rhs,
+                                    uint8_t k_cols,
+                                    uint8_t max_internal_k,
+                                    float32 c,
+                                    bool (*mul_to_internal)(uint8_t,
+                                                            uint8_t,
+                                                            AMEMfmaccInternal30 *),
+                                    float32 (*fallback_convert)(uint8_t,
+                                                                float_status *),
+                                    AMEMfmaccSpecial (*classify)(uint8_t),
+                                    float_status *fpst)
 {
     AMEMfmaccInternal30 acc_int;
     AMEMfmaccInternal30 prod_list[4];
@@ -1628,16 +1637,13 @@ static float32 xsmtame_mfmacc_cell8_internal30(const uint8_t *lhs,
         return special_z;
     }
 
-    if (k_cols > 4) {
+    if (k_cols > max_internal_k) {
         return xsmtame_mfmacc_reference_dot8(lhs, rhs, k_cols, c,
                                                   fallback_convert, fpst);
     }
 
     for (k = 0; k < k_cols; ++k) {
-        if (!mul_to_internal(lhs[k], rhs[k], &prod_list[k])) {
-            return xsmtame_mfmacc_reference_dot8(lhs, rhs, k_cols, c,
-                                                      fallback_convert, fpst);
-        }
+        mul_to_internal(lhs[k], rhs[k], &prod_list[k]);
     }
 
     xsmtame_mfmacc_add_internal30_unified(prod_list, k_cols, &acc_int);
@@ -1667,14 +1673,15 @@ static void xsmtame_mfmacc16_common(CPURISCVState *env, uint32_t md,
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
             float32 c = make_float32(acc[m * acc_cols + n]);
-            c = xsmtame_mfmacc_cell16_internal30(&tA[m * a_cols],
-                                                      &tBT[n * b_cols],
-                                                      shape.k,
-                                                      c,
-                                                      mul_to_internal,
-                                                      fallback_convert,
-                                                      classify,
-                                                      fpst);
+            c = xsmtame_mfmacc_cell16(&tA[m * a_cols],
+                                      &tBT[n * b_cols],
+                                      shape.k,
+                                      XSMTAME_MFMACC_MAX_INTERNAL_K_16,
+                                      c,
+                                      mul_to_internal,
+                                      fallback_convert,
+                                      classify,
+                                      fpst);
             acc[m * acc_cols + n] = float32_val(c);
         }
     }
@@ -1705,14 +1712,15 @@ static void xsmtame_mfmacc8_common(CPURISCVState *env, uint32_t md,
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
             float32 c = make_float32(acc[m * acc_cols + n]);
-            c = xsmtame_mfmacc_cell8_internal30(&tA[m * a_row_bytes],
-                                                     &tBT[n * b_row_bytes],
-                                                     shape.k,
-                                                     c,
-                                                     mul_to_internal,
-                                                     fallback_convert,
-                                                     classify,
-                                                     fpst);
+            c = xsmtame_mfmacc_cell8(&tA[m * a_row_bytes],
+                                     &tBT[n * b_row_bytes],
+                                     shape.k,
+                                     XSMTAME_MFMACC_MAX_INTERNAL_K_8,
+                                     c,
+                                     mul_to_internal,
+                                     fallback_convert,
+                                     classify,
+                                     fpst);
             acc[m * acc_cols + n] = float32_val(c);
         }
     }
@@ -1744,14 +1752,15 @@ static void xsmtame_mfmacc16_acc16_common(CPURISCVState *env, uint32_t md,
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
             float32 c = acc_to_f32(acc[m * acc_cols + n], fpst);
-            c = xsmtame_mfmacc_cell16_internal30(&tA[m * a_cols],
-                                                      &tBT[n * b_cols],
-                                                      shape.k,
-                                                      c,
-                                                      mul_to_internal,
-                                                      xsmtame_mfmacc_fp16_to_f32,
-                                                      xsmtame_mfmacc_classify_f16,
-                                                      fpst);
+            c = xsmtame_mfmacc_cell16(&tA[m * a_cols],
+                                      &tBT[n * b_cols],
+                                      shape.k,
+                                      XSMTAME_MFMACC_MAX_INTERNAL_K_16,
+                                      c,
+                                      mul_to_internal,
+                                      xsmtame_mfmacc_fp16_to_f32,
+                                      xsmtame_mfmacc_classify_f16,
+                                      fpst);
             acc[m * acc_cols + n] = f32_to_acc(c, fpst);
         }
     }
@@ -1786,14 +1795,15 @@ static void xsmtame_mfmacc8_acc16_common(CPURISCVState *env, uint32_t md,
     for (m = 0; m < shape.m; m++) {
         for (n = 0; n < shape.n; n++) {
             float32 c = acc_to_f32(acc[m * acc_cols + n], fpst);
-            c = xsmtame_mfmacc_cell8_internal30(&tA[m * a_row_bytes],
-                                                     &tBT[n * b_row_bytes],
-                                                     shape.k,
-                                                     c,
-                                                     mul_to_internal,
-                                                     fallback_convert,
-                                                     classify,
-                                                     fpst);
+            c = xsmtame_mfmacc_cell8(&tA[m * a_row_bytes],
+                                     &tBT[n * b_row_bytes],
+                                     shape.k,
+                                     XSMTAME_MFMACC_MAX_INTERNAL_K_8,
+                                     c,
+                                     mul_to_internal,
+                                     fallback_convert,
+                                     classify,
+                                     fpst);
             acc[m * acc_cols + n] = f32_to_acc(c, fpst);
         }
     }
