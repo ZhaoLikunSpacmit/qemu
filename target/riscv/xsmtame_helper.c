@@ -1267,6 +1267,71 @@ static inline uint32_t xsmtame_mfmacc_round_to_odd32(uint32_t a,
     return z;
 }
 
+static uint32_t xsmtame_mfmacc_round_pack_subnormal_frac32(bool sign,
+                                                          uint32_t sig,
+                                                          uint16_t dist,
+                                                          float_status *fpst)
+{
+    FloatRoundMode rounding_mode = get_float_rounding_mode(fpst);
+    uint64_t sig_wide = sig;
+    uint64_t discarded;
+    uint64_t halfway;
+    uint32_t frac;
+    int flags = 0;
+
+    g_assert(dist != 0);
+
+    if (dist < 64) {
+        frac = sig_wide >> dist;
+        discarded = sig_wide & ((UINT64_C(1) << dist) - 1);
+        halfway = UINT64_C(1) << (dist - 1);
+    } else {
+        frac = 0;
+        discarded = sig_wide;
+        halfway = UINT64_MAX;
+    }
+
+    if (discarded != 0) {
+        switch (rounding_mode) {
+        case float_round_nearest_even:
+            if (discarded > halfway ||
+                (discarded == halfway && (frac & 1))) {
+                frac++;
+            }
+            break;
+        case float_round_ties_away:
+            if (discarded >= halfway) {
+                frac++;
+            }
+            break;
+        case float_round_down:
+            if (sign) {
+                frac++;
+            }
+            break;
+        case float_round_up:
+            if (!sign) {
+                frac++;
+            }
+            break;
+        case float_round_to_zero:
+            break;
+        default:
+            g_assert_not_reached();
+        }
+
+        flags |= float_flag_inexact;
+        if (get_float_detect_tininess(fpst) ==
+                float_tininess_before_rounding ||
+            frac < UINT32_C(0x00800000)) {
+            flags |= float_flag_underflow;
+        }
+        float_raise(flags, fpst);
+    }
+
+    return frac;
+}
+
 static bool xsmtame_mfmacc_decode_float(uint16_t ui,
                                              uint8_t exp_bits,
                                              uint8_t frac_bits,
@@ -1543,6 +1608,7 @@ static float32 xsmtame_mfmacc_internal30_to_f32(const AMEMfmaccInternal30 *a,
 {
     uint32_t ui_z;
     int16_t exp;
+    uint16_t shift_dist;
     uint32_t frac;
 
     if (a->is_zero) {
@@ -1552,8 +1618,15 @@ static float32 xsmtame_mfmacc_internal30_to_f32(const AMEMfmaccInternal30 *a,
 
     exp = a->exp + 127;
     if (exp <= 0) {
-        float_raise(float_flag_underflow | float_flag_inexact, fpst);
-        ui_z = (((uint32_t)a->sign) << 31);
+        /* Subnormals need one extra shift beyond the three guard bits. */
+        shift_dist = (uint16_t)(4 - exp);
+        frac = xsmtame_mfmacc_round_pack_subnormal_frac32(a->sign, a->sig,
+                                                         shift_dist, fpst);
+        if (frac >= UINT32_C(0x00800000)) {
+            ui_z = (((uint32_t)a->sign) << 31) | (1u << 23);
+        } else {
+            ui_z = (((uint32_t)a->sign) << 31) | frac;
+        }
         return make_float32(ui_z);
     }
     if (exp >= 0xFF) {
