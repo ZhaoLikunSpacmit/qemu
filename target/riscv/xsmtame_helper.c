@@ -359,6 +359,66 @@ static void xsmtame_mmov_m_x_common(CPURISCVState *env, uint32_t md,
     }
 }
 
+static void xsmtame_zero_tile_load_inactive_region(CPURISCVState *env,
+                                                   uint32_t td,
+                                                   size_t elem_size,
+                                                   uint32_t rows,
+                                                   uint32_t cols)
+{
+    size_t reg_size = ame_env_tlenb(env);
+    size_t row_bytes = xsmtame_matrix_layout(env, td, elem_size).row_bytes;
+    size_t total_rows = row_bytes ? reg_size / row_bytes : 0;
+    size_t loaded_bytes = (size_t)cols * elem_size;
+    uint8_t *tile = xsmtame_tile_ptr(env, td);
+    size_t row;
+
+    g_assert(elem_size != 0);
+    g_assert(rows <= total_rows);
+    g_assert(loaded_bytes <= row_bytes);
+
+    if (loaded_bytes < row_bytes) {
+        for (row = 0; row < rows; row++) {
+            memset(tile + row * row_bytes + loaded_bytes, 0,
+                   row_bytes - loaded_bytes);
+        }
+    }
+    if (rows < total_rows) {
+        memset(tile + rows * row_bytes, 0,
+               (total_rows - rows) * row_bytes);
+    }
+}
+
+static void xsmtame_zero_acc_load_inactive_region(CPURISCVState *env,
+                                                  uint32_t ad,
+                                                  size_t elem_size,
+                                                  uint32_t rows,
+                                                  uint32_t cols,
+                                                  bool transpose)
+{
+    size_t reg_size = ame_env_acc_len_b(env);
+    size_t row_bytes = xsmtame_matrix_layout(env, ad + AME_NR_TILES,
+                                             elem_size).row_bytes;
+    size_t total_rows = row_bytes ? reg_size / row_bytes : 0;
+    size_t loaded_bytes = (size_t)cols * elem_size;
+    uint8_t *acc = xsmtame_acc_ptr(env, ad);
+    size_t row;
+
+    g_assert(elem_size != 0);
+    g_assert(rows <= total_rows);
+    g_assert(loaded_bytes <= row_bytes);
+
+    if (transpose) {
+        for (row = rows; row < total_rows; row++) {
+            memset(acc + row * row_bytes, 0, loaded_bytes);
+        }
+    } else if (loaded_bytes < row_bytes) {
+        for (row = 0; row < rows; row++) {
+            memset(acc + row * row_bytes + loaded_bytes, 0,
+                   row_bytes - loaded_bytes);
+        }
+    }
+}
+
 static inline void xsmtame_load_tile8_stride(uint8_t *tile,
                                              CPURISCVState *env,
                                              uint32_t reg,
@@ -379,6 +439,9 @@ static inline void xsmtame_load_tile8_stride(uint8_t *tile,
                               row * stride + col));
         }
     }
+
+    xsmtame_zero_tile_load_inactive_region(env, reg, sizeof(*tile),
+                                           rows, cols);
 }
 
 static inline void xsmtame_store_tile8_stride(const uint8_t *tile,
@@ -423,6 +486,9 @@ static inline void xsmtame_load_tile16_stride(uint16_t *tile16,
                               row * stride + col * sizeof(*tile16)));
         }
     }
+
+    xsmtame_zero_tile_load_inactive_region(env, reg, sizeof(*tile16),
+                                           rows, cols);
 }
 
 static inline void xsmtame_store_tile16_stride(const uint16_t *tile16,
@@ -467,6 +533,9 @@ static inline void xsmtame_load_tile32_stride(uint32_t *tile32,
                              row * stride + col * sizeof(*tile32)));
         }
     }
+
+    xsmtame_zero_tile_load_inactive_region(env, reg, sizeof(*tile32),
+                                           rows, cols);
 }
 
 static inline void xsmtame_store_tile32_stride(const uint32_t *tile32,
@@ -512,6 +581,9 @@ static inline void xsmtame_load_acc8_stride(uint8_t *acc8,
                               row * stride + col));
         }
     }
+
+    xsmtame_zero_acc_load_inactive_region(env, reg, sizeof(*acc8),
+                                          rows, cols, transpose);
 }
 
 static inline void xsmtame_store_acc8_stride(const uint8_t *acc8,
@@ -558,6 +630,9 @@ static inline void xsmtame_load_acc16_stride(uint16_t *acc16,
                               row * stride + col * sizeof(*acc16)));
         }
     }
+
+    xsmtame_zero_acc_load_inactive_region(env, reg, sizeof(*acc16),
+                                          rows, cols, transpose);
 }
 
 static inline void xsmtame_store_acc16_stride(const uint16_t *acc16,
@@ -604,6 +679,9 @@ static inline void xsmtame_load_acc32_stride(uint32_t *acc32,
                               row * stride + col * sizeof(*acc32)));
         }
     }
+
+    xsmtame_zero_acc_load_inactive_region(env, reg, sizeof(*acc32),
+                                          rows, cols, transpose);
 }
 
 static inline void xsmtame_store_acc32_stride(const uint32_t *acc32,
